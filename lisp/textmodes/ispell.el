@@ -740,7 +740,7 @@ when the language uses non-ASCII characters.
 Note that with \"ispell\" as the speller, the CASECHARS and
 OTHERCHARS slots of the alist should contain the same character
 set as casechars and otherchars in the LANGUAGE.aff file \(e.g.,
-english.aff\).  apsell and hunspell don't have this limitation.")
+english.aff\).  aspell and hunspell don't have this limitation.")
 
 (defvar ispell-really-aspell nil)   ; Non-nil if we can use aspell extensions.
 (defvar ispell-really-hunspell nil) ; Non-nil if we can use hunspell extensions.
@@ -874,7 +874,7 @@ Otherwise returns the library directory name, if that is defined."
 	    (setq ispell-really-aspell nil)))
 	 (ispell-really-hunspell
 	  (if (ispell-check-minver hunspell8-minver ispell-really-hunspell)
-	      (setq ispell-encoding8-command "-i ")
+	      (setq ispell-encoding8-command "-i")
 	    (setq ispell-really-hunspell nil))))))
     result))
 
@@ -1334,8 +1334,10 @@ Protects against bogus binding of `enable-multibyte-characters' in XEmacs."
   (nth 5 (or (assoc ispell-current-dictionary ispell-local-dictionary-alist)
 	     (assoc ispell-current-dictionary ispell-dictionary-alist))))
 (defun ispell-get-extended-character-mode ()
-  (nth 6 (or (assoc ispell-current-dictionary ispell-local-dictionary-alist)
-	     (assoc ispell-current-dictionary ispell-dictionary-alist))))
+  (if ispell-really-hunspell     ;; hunspell treats ~word as ordinary words
+      nil                        ;; in pipe mode. Disable extended-char-mode
+    (nth 6 (or (assoc ispell-current-dictionary ispell-local-dictionary-alist)
+	       (assoc ispell-current-dictionary ispell-dictionary-alist)))))
 (defun ispell-get-coding-system ()
   (nth 7 (or (assoc ispell-current-dictionary ispell-local-dictionary-alist)
 	     (assoc ispell-current-dictionary ispell-dictionary-alist))))
@@ -2616,9 +2618,12 @@ Keeps argument list for future ispell invocations for no async support."
            ;; right encoding for communication. ispell or older aspell/hunspell
            ;; does not support this.
            (if ispell-encoding8-command
-               (list
-                (concat ispell-encoding8-command
-                        (symbol-name (ispell-get-coding-system)))))
+	       (if ispell-really-hunspell
+		   (list ispell-encoding8-command
+			 (upcase (symbol-name (ispell-get-coding-system))))
+		 (list
+		  (concat ispell-encoding8-command
+			  (symbol-name (ispell-get-coding-system))))))
            ispell-extra-args)))
 
     ;; Initially we don't know any buffer's local words.
