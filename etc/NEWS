@@ -24,6 +24,11 @@ so we will look at it and add it to the manual.
 * Installation Changes in Emacs 24.2
 
 * Startup Changes in Emacs 24.2
+
+** Emacs no longer searches for `leim-list.el' files beneath the standard
+lisp/ directory.  There should not be any there anyway.  If you have
+been adding them there, put them somewhere else, eg site-lisp.
+
 
 * Changes in Emacs 24.2
 
@@ -34,10 +39,21 @@ so we will look at it and add it to the manual.
 * Editing Changes in Emacs 24.2
 
 * Changes in Specialized Modes and Packages in Emacs 24.2
+
+** erc will look up server/channel names via auth-source and use the
+   channel keys found, if any.
+
 
 * New Modes and Packages in Emacs 24.2
 
 * Incompatible Lisp Changes in Emacs 24.2
+
++++
+** Docstrings starting with `*' no longer indicate user options.
+Only variables defined using `defcustom' are considered user options.
+The function `user-variable-p' is now an obsolete alias for
+`custom-variable-p'.
+
 
 * Lisp changes in Emacs 24.2
 
