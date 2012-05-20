@@ -3,7 +3,6 @@
 @c Copyright (C) 1990-1995, 1998-1999, 2001-2012
 @c   Free Software Foundation, Inc.
 @c See the file elisp.texi for copying conditions.
-@setfilename ../../info/sequences
 @node Sequences Arrays Vectors, Hash Tables, Lists, Top
 @chapter Sequences, Arrays, and Vectors
 @cindex sequence
@@ -107,6 +106,11 @@ Emacs character code.
 
 @noindent
 See also @code{string-bytes}, in @ref{Text Representations}.
+
+If you need to compute the width of a string on display, you should
+use @code{string-width} (@pxref{Width}), not @code{length}, since
+@code{length} only counts the number of characters, but does not
+account for the display width of each character.
 
 @defun elt sequence index
 @cindex elements of sequences

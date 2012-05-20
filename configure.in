@@ -4,7 +4,7 @@ dnl 	autoconf
 dnl in the directory containing this script.
 dnl If you changed any AC_DEFINES, also run autoheader.
 dnl
-dnl Copyright (C) 1994-1996, 1999-2012  Free Software Foundation, Inc.
+dnl Copyright (C) 1994-1996, 1999-2012 Free Software Foundation, Inc.
 dnl
 dnl  This file is part of GNU Emacs.
 dnl
@@ -22,7 +22,7 @@ dnl  You should have received a copy of the GNU General Public License
 dnl  along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.
 
 AC_PREREQ(2.65)
-AC_INIT(emacs, 24.0.94)
+AC_INIT(emacs, 24.1.50)
 AC_CONFIG_HEADER(src/config.h:src/config.in)
 AC_CONFIG_SRCDIR(src/lisp.h)
 AC_CONFIG_AUX_DIR(build-aux)
@@ -760,12 +760,12 @@ dnl Don't use GZIP, which is used by gzip for additional parameters.
 AC_PATH_PROG(GZIP_PROG, gzip)
 
 
-## Need makeinfo >= 4.6 (?) to build the manuals.
+## Need makeinfo >= 4.7 (?) to build the manuals.
 AC_PATH_PROG(MAKEINFO, makeinfo, no)
 dnl By this stage, configure has already checked for egrep and set EGREP,
 dnl or exited with an error if no egrep was found.
 if test "$MAKEINFO" != "no" && \
-  test x"`$MAKEINFO --version 2> /dev/null | $EGREP 'texinfo[[^0-9]]*([[1-4]][[0-9]]+|[[5-9]]|4\.[[6-9]]|4\.[[1-5]][[0-9]]+)'`" = x; then
+  test x"`$MAKEINFO --version 2> /dev/null | $EGREP 'texinfo[[^0-9]]*([[1-4]][[0-9]]+|[[5-9]]|4\.[[7-9]]|4\.[[1-6]][[0-9]]+)'`" = x; then
    MAKEINFO=no
 fi
 
@@ -785,7 +785,7 @@ if test "$MAKEINFO" = "no"; then
   if test "x${with_makeinfo}" = "xno"; then
     HAVE_MAKEINFO=no
   elif test ! -e $srcdir/info/emacs; then
-    AC_MSG_ERROR( [You do not seem to have makeinfo >= 4.6, and your
+    AC_MSG_ERROR( [You do not seem to have makeinfo >= 4.7, and your
 source tree does not seem to have pre-built manuals in the `info' directory.
 Either install a suitable version of makeinfo, or re-run configure
 with the `--without-makeinfo' option to build without the manuals.] )
@@ -1126,17 +1126,14 @@ AC_DEFUN([PKG_CHECK_MODULES], [
      if $PKG_CONFIG --atleast-pkgconfig-version $PKG_CONFIG_MIN_VERSION; then
         AC_MSG_CHECKING(for $2)
 
-        if $PKG_CONFIG --exists "$2" 2>&AS_MESSAGE_LOG_FD; then
-            AC_MSG_RESULT(yes)
+        if $PKG_CONFIG --exists "$2" 2>&AS_MESSAGE_LOG_FD &&
+	   $1_CFLAGS=`$PKG_CONFIG --cflags "$2" 2>&AS_MESSAGE_LOG_FD` &&
+	   $1_LIBS=`$PKG_CONFIG --libs "$2" 2>&AS_MESSAGE_LOG_FD`; then
+
+	    $1_CFLAGS=`AS_ECHO(["$$1_CFLAGS"]) | sed -e 's,///*,/,g'`
+	    $1_LIBS=`AS_ECHO(["$$1_LIBS"]) | sed -e 's,///*,/,g'`
+            AC_MSG_RESULT([yes CFLAGS='$$1_CFLAGS' LIBS='$$1_LIBS'])
             succeeded=yes
-
-            AC_MSG_CHECKING($1_CFLAGS)
-            $1_CFLAGS=`$PKG_CONFIG --cflags "$2"|sed -e 's,///*,/,g'`
-            AC_MSG_RESULT($$1_CFLAGS)
-
-            AC_MSG_CHECKING($1_LIBS)
-            $1_LIBS=`$PKG_CONFIG --libs "$2"|sed -e 's,///*,/,g'`
-            AC_MSG_RESULT($$1_LIBS)
         else
             AC_MSG_RESULT(no)
             $1_CFLAGS=""
@@ -2642,7 +2639,7 @@ AC_SUBST(LIBGPM)
 dnl Check for malloc/malloc.h on darwin
 AC_CHECK_HEADER(malloc/malloc.h, [AC_DEFINE(HAVE_MALLOC_MALLOC_H, 1, [Define to 1 if you have the <malloc/malloc.h> header file.])])
 
-C_SWITCH_X_SYSTEM=
+GNUSTEP_CFLAGS=
 ### Use NeXTstep API to implement GUI.
 if test "${HAVE_NS}" = "yes"; then
   AC_DEFINE(HAVE_NS, 1, [Define to 1 if you are using the NeXTstep API, either GNUstep or Cocoa on Mac OS X.])
@@ -2653,9 +2650,7 @@ if test "${HAVE_NS}" = "yes"; then
     AC_DEFINE(NS_IMPL_GNUSTEP, 1, [Define to 1 if you are using NS windowing under GNUstep.])
     # See also .m.o rule in Makefile.in */
     # FIXME: are all these flags really needed?  Document here why.  */
-    dnl FIXME this should be renamed to GNUSTEP_CFLAGS, and only
-    dnl used in src/Makefile.in.
-    C_SWITCH_X_SYSTEM="-D_REENTRANT -fPIC -fno-strict-aliasing -I${GNUSTEP_SYSTEM_HEADERS} ${GNUSTEP_LOCAL_HEADERS}"
+    GNUSTEP_CFLAGS="-D_REENTRANT -fPIC -fno-strict-aliasing -I${GNUSTEP_SYSTEM_HEADERS} ${GNUSTEP_LOCAL_HEADERS}"
     ## Extra CFLAGS applied to src/*.m files.
     GNU_OBJC_CFLAGS="$GNU_OBJC_CFLAGS -fgnu-runtime -Wno-import -fconstant-string-class=NSConstantString -DGNUSTEP_BASE_LIBRARY=1 -DGNU_GUI_LIBRARY=1 -DGNU_RUNTIME=1 -DGSWARN -DGSDIAGNOSE"
   fi
@@ -3275,7 +3270,7 @@ AC_SUBST(gameuser)
 ## end of LIBX_BASE, but nothing ever set it.
 AC_SUBST(LD_SWITCH_X_SITE)
 AC_SUBST(C_SWITCH_X_SITE)
-AC_SUBST(C_SWITCH_X_SYSTEM)
+AC_SUBST(GNUSTEP_CFLAGS)
 AC_SUBST(CFLAGS)
 ## Used in lwlib/Makefile.in.
 AC_SUBST(X_TOOLKIT_TYPE)
@@ -3860,6 +3855,13 @@ to run if these resources are not installed."
    echo
 fi
 
+if test "${opsys}" = "cygwin"; then
+  case `uname -r` in
+    1.5.*) AC_MSG_WARN([[building Emacs on Cygwin 1.5 is not supported.]])
+           echo
+	   ;;
+  esac
+fi
 
 # Remove any trailing slashes in these variables.
 [test "${prefix}" != NONE &&
@@ -3891,6 +3893,16 @@ if test -f $srcdir/${opt_makefile}.in; then
   dnl ", [], [opt_makefile='$opt_makefile']" and it should work.
   AC_CONFIG_FILES([test/automated/Makefile])
 fi
+
+
+dnl admin/ may or may not be present.
+opt_makefile=admin/unidata/Makefile
+
+if test -f $srcdir/${opt_makefile}.in; then
+  SUBDIR_MAKEFILES="$SUBDIR_MAKEFILES $opt_makefile"
+  AC_CONFIG_FILES([admin/unidata/Makefile])
+fi
+
 
 SUBDIR_MAKEFILES_IN=`echo " ${SUBDIR_MAKEFILES}" | sed -e 's| | $(srcdir)/|g' -e 's|Makefile|Makefile.in|g'`
 

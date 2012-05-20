@@ -1339,8 +1339,6 @@ struct Lisp_Misc_Any		/* Supertype of all Misc types.  */
   ENUM_BF (Lisp_Misc_Type) type : 16;		/* = Lisp_Misc_??? */
   unsigned gcmarkbit : 1;
   int spacer : 15;
-  /* Make it as long as "Lisp_Free without padding".  */
-  void *fill;
 };
 
 struct Lisp_Marker
@@ -1532,13 +1530,6 @@ struct Lisp_Free
     unsigned gcmarkbit : 1;
     int spacer : 15;
     union Lisp_Misc *chain;
-#ifdef USE_LSB_TAG
-    /* Try to make sure that sizeof(Lisp_Misc) preserves TYPEBITS-alignment.
-       This assumes that Lisp_Marker is the largest of the alternatives and
-       that Lisp_Misc_Any has the same size as "Lisp_Free w/o padding".  */
-    char padding[((((sizeof (struct Lisp_Marker) - 1) >> GCTYPEBITS) + 1)
-		  << GCTYPEBITS) - sizeof (struct Lisp_Misc_Any)];
-#endif
   };
 
 /* To get the type field of a union Lisp_Misc, use XMISCTYPE.
@@ -1547,19 +1538,19 @@ struct Lisp_Free
 union Lisp_Misc
   {
     struct Lisp_Misc_Any u_any;	   /* Supertype of all Misc types.  */
-    struct Lisp_Free u_free;	   /* Includes padding to force alignment.  */
-    struct Lisp_Marker u_marker;			 /* 5 */
-    struct Lisp_Overlay u_overlay;			 /* 5 */
-    struct Lisp_Save_Value u_save_value;		 /* 3 */
+    struct Lisp_Free u_free;
+    struct Lisp_Marker u_marker;
+    struct Lisp_Overlay u_overlay;
+    struct Lisp_Save_Value u_save_value;
   };
 
 union Lisp_Fwd
   {
-    struct Lisp_Intfwd u_intfwd;			 /* 2 */
-    struct Lisp_Boolfwd u_boolfwd;			 /* 2 */
-    struct Lisp_Objfwd u_objfwd;			 /* 2 */
-    struct Lisp_Buffer_Objfwd u_buffer_objfwd;		 /* 2 */
-    struct Lisp_Kboard_Objfwd u_kboard_objfwd;		 /* 2 */
+    struct Lisp_Intfwd u_intfwd;
+    struct Lisp_Boolfwd u_boolfwd;
+    struct Lisp_Objfwd u_objfwd;
+    struct Lisp_Buffer_Objfwd u_buffer_objfwd;
+    struct Lisp_Kboard_Objfwd u_kboard_objfwd;
   };
 
 /* Lisp floating point type */
@@ -2223,7 +2214,7 @@ struct gcpro
 #define GC_USE_GCPROS_CHECK_ZOMBIES	3
 
 #ifndef GC_MARK_STACK
-#define GC_MARK_STACK GC_USE_GCPROS_AS_BEFORE
+#define GC_MARK_STACK GC_MAKE_GCPROS_NOOPS
 #endif
 
 /* Whether we do the stack marking manually.  */
@@ -2845,6 +2836,14 @@ extern void syms_of_alloc (void);
 extern struct buffer * allocate_buffer (void);
 extern int valid_lisp_object_p (Lisp_Object);
 
+#ifdef REL_ALLOC
+/* Defined in ralloc.c */
+extern void *r_alloc (void **, size_t);
+extern void r_alloc_free (void **);
+extern void *r_re_alloc (void **, size_t);
+extern void r_alloc_reset_variable (void **, void **);
+#endif
+
 /* Defined in chartab.c */
 EXFUN (Fmake_char_table, 2);
 EXFUN (Fset_char_table_parent, 2);
@@ -2941,6 +2940,7 @@ extern Lisp_Object Qinhibit_quit, Qclosure;
 extern Lisp_Object Qand_rest;
 extern Lisp_Object Vautoload_queue;
 extern Lisp_Object Vsignaling_function;
+extern Lisp_Object inhibit_lisp_code;
 extern int handling_signal;
 #if BYTE_MARK_STACK
 extern struct catchtag *catchlist;
@@ -3552,6 +3552,7 @@ EXFUN (Fmsdos_downcase_filename, 1);
 #ifdef HAVE_LIBXML2
 /* Defined in xml.c */
 extern void syms_of_xml (void);
+extern void xml_cleanup_parser (void);
 #endif
 
 #ifdef HAVE_MENUS

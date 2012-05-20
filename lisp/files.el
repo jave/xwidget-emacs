@@ -877,14 +877,13 @@ or mount points potentially requiring authentication as a different user.")
 ;;               (setq dir nil))))
 ;;       nil)))
 
-(defun locate-dominating-file (file name &optional predicate)
+(defun locate-dominating-file (file name)
   "Look up the directory hierarchy from FILE for a file named NAME.
 Stop at the first parent directory containing a file NAME,
 and return the directory.  Return nil if not found.
 
-Optional argument PREDICATE is a function of one argument, a file.
-It should return non-nil if the file is acceptable.  The default is
-`file-exists-p'; you might, e.g., want to use `file-readable-p' instead."
+This function only tests if FILE exists.  If you care about whether
+it is readable, regular, etc., you should test the result."
   ;; We used to use the above locate-dominating-files code, but the
   ;; directory-files call is very costly, so we're much better off doing
   ;; multiple calls using the code in here.
@@ -911,8 +910,11 @@ It should return non-nil if the file is acceptable.  The default is
                     ;;   (setq user (nth 2 (file-attributes file)))
                     ;;   (and prev-user (not (equal user prev-user))))
                     (string-match locate-dominating-stop-dir-regexp file)))
-      (setq try (funcall (or predicate 'file-exists-p)
-			 (expand-file-name name file)))
+      ;; FIXME? maybe this function should (optionally?)
+      ;; use file-readable-p instead.  In many cases, an unreadable
+      ;; FILE is no better than a non-existent one.
+      ;; See eg dir-locals-find-file.
+      (setq try (file-exists-p (expand-file-name name file)))
       (cond (try (setq root file))
             ((equal file (setq file (file-name-directory
                                      (directory-file-name file))))
@@ -2203,10 +2205,7 @@ in that case, this function acts as if `enable-local-variables' were t."
              (boundp 'font-lock-keywords)
              (eq (car font-lock-keywords) t))
     (setq font-lock-keywords (cadr font-lock-keywords))
-    (font-lock-mode 1))
-
-  (if (fboundp 'ucs-set-table-for-input) ; don't lose when building
-      (ucs-set-table-for-input)))
+    (font-lock-mode 1)))
 
 (defcustom auto-mode-case-fold t
   "Non-nil means to try second pass through `auto-mode-alist'.
@@ -3524,7 +3523,7 @@ LIST is a list of the form accepted by the function.
 When a file is visited, the file's class is found.  A directory
 may be assigned a class using `dir-locals-set-directory-class'.
 Then variables are set in the file's buffer according to the
-class' LIST.  The list is processed in order.
+VARIABLES list of the class.  The list is processed in order.
 
 * If the element is of the form (MAJOR-MODE . ALIST), and the
   buffer's major mode is derived from MAJOR-MODE (as determined
@@ -3550,7 +3549,7 @@ across different environments and users.")
   "Find the directory-local variables for FILE.
 This searches upward in the directory tree from FILE.
 It stops at the first directory that has been registered in
-`dir-locals-directory-cache' or contains a readable `dir-locals-file'.
+`dir-locals-directory-cache' or contains a `dir-locals-file'.
 If it finds an entry in the cache, it checks that it is valid.
 A cache entry with no modification time element (normally, one that
 has been assigned directly using `dir-locals-set-directory-class', not
@@ -3568,15 +3567,18 @@ of no valid cache entry."
 	  (if (eq system-type 'ms-dos)
 	      (dosified-file-name dir-locals-file)
 	    dir-locals-file))
-	 ;; FIXME?  Is it right to silently ignore unreadable files?
-	 (locals-file (locate-dominating-file file dir-locals-file-name
-					      (lambda (file)
-						(and (file-readable-p file)
-						     (file-regular-p file)))))
+	 (locals-file (locate-dominating-file file dir-locals-file-name))
 	 (dir-elt nil))
     ;; `locate-dominating-file' may have abbreviated the name.
-    (if locals-file
-	(setq locals-file (expand-file-name dir-locals-file-name locals-file)))
+    (and locals-file
+	 (setq locals-file (expand-file-name dir-locals-file-name locals-file)))
+	 ;; Let dir-locals-read-from-file inform us via demoted-errors
+	 ;; about unreadable files, etc.
+	 ;; Maybe we'd want to keep searching though - that is
+	 ;; a locate-dominating-file issue.
+;;;	 (or (not (file-readable-p locals-file))
+;;;	     (not (file-regular-p locals-file)))
+;;;	 (setq locals-file nil))
     ;; Find the best cached value in `dir-locals-directory-cache'.
     (dolist (elt dir-locals-directory-cache)
       (when (and (eq t (compare-strings file nil (length (car elt))
@@ -3618,15 +3620,19 @@ FILE is the name of the file holding the variables to apply.
 The new class name is the same as the directory in which FILE
 is found.  Returns the new class name."
   (with-temp-buffer
-    (insert-file-contents file)
-    (let* ((dir-name (file-name-directory file))
-	   (class-name (intern dir-name))
-	   (variables (let ((read-circle nil))
-			(read (current-buffer)))))
-      (dir-locals-set-class-variables class-name variables)
-      (dir-locals-set-directory-class dir-name class-name
-				      (nth 5 (file-attributes file)))
-      class-name)))
+    ;; Errors reading the file are not very informative.
+    ;; Eg just "Error: (end-of-file)" does not give any clue that the
+    ;; problem is related to dir-locals.
+    (with-demoted-errors
+      (insert-file-contents file)
+      (let* ((dir-name (file-name-directory file))
+	     (class-name (intern dir-name))
+	     (variables (let ((read-circle nil))
+			  (read (current-buffer)))))
+	(dir-locals-set-class-variables class-name variables)
+	(dir-locals-set-directory-class dir-name class-name
+					(nth 5 (file-attributes file)))
+	class-name))))
 
 (defun hack-dir-local-variables ()
   "Read per-directory local variables for the current buffer.
@@ -5006,20 +5012,20 @@ If FILE1 or FILE2 does not exist, the return value is unspecified."
 	     (setq f2-attr (file-attributes (file-truename file2)))
 	     (equal f1-attr f2-attr))))))
 
-(defun file-subdir-of-p (dir1 dir2)
-  "Return non-nil if DIR1 is a subdirectory of DIR2.
-A directory is considered to be a subdirectory of itself.
-Return nil if top directory DIR2 is not an existing directory."
-  (let ((handler (or (find-file-name-handler dir1 'file-subdir-of-p)
-                     (find-file-name-handler dir2 'file-subdir-of-p))))
+(defun file-in-directory-p (file dir)
+  "Return non-nil if FILE is in DIR or a subdirectory of DIR.
+A directory is considered to be \"in\" itself.
+Return nil if DIR is not an existing directory."
+  (let ((handler (or (find-file-name-handler file 'file-in-directory-p)
+                     (find-file-name-handler dir  'file-in-directory-p))))
     (if handler
-        (funcall handler 'file-subdir-of-p dir1 dir2)
-      (when (file-directory-p dir2) ; Top dir must exist.
-	(setq dir1 (file-truename dir1)
-	      dir2 (file-truename dir2))
-	(let ((ls1  (or (split-string dir1 "/" t) '("/")))
-	      (ls2  (or (split-string dir2 "/" t) '("/")))
-	      (root (if (string-match "\\`/" dir1) "/" ""))
+        (funcall handler 'file-in-directory-p file dir)
+      (when (file-directory-p dir) ; DIR must exist.
+	(setq file (file-truename file)
+	      dir  (file-truename dir))
+	(let ((ls1 (split-string file "/" t))
+	      (ls2 (split-string dir  "/" t))
+	      (root (if (string-match "\\`/" file) "/" ""))
 	      (mismatch nil))
 	  (while (and ls1 ls2 (not mismatch))
 	    (if (string-equal (car ls1) (car ls2))
@@ -5028,7 +5034,7 @@ Return nil if top directory DIR2 is not an existing directory."
 	    (setq ls1 (cdr ls1)
 		  ls2 (cdr ls2)))
 	  (unless mismatch
-	    (file-equal-p root dir2)))))))
+	    (file-equal-p root dir)))))))
 
 (defun copy-directory (directory newname &optional keep-time parents copy-contents)
   "Copy DIRECTORY to NEWNAME.  Both args must be strings.
@@ -5056,7 +5062,7 @@ directly into NEWNAME instead."
 	    (format "Copy directory %s to: " dir)
 	    default-directory default-directory nil nil)
 	   current-prefix-arg t nil)))
-  (when (file-subdir-of-p newname directory)
+  (when (file-in-directory-p newname directory)
     (error "Cannot copy `%s' into its subdirectory `%s'"
            directory newname))
   ;; If default-directory is a remote directory, make sure we find its
@@ -5093,13 +5099,14 @@ directly into NEWNAME instead."
 	       ;; We do not want to copy "." and "..".
 	       (directory-files directory 'full
 				directory-files-no-dot-files-regexp))
-	(if (file-directory-p file)
-	    (copy-directory file newname keep-time parents)
-	  (let ((target (expand-file-name (file-name-nondirectory file) newname))
-		(attrs (file-attributes file)))
-	    (if (stringp (car attrs)) ; Symbolic link
-		(make-symbolic-link (car attrs) target t)
-	      (copy-file file target t keep-time)))))
+	(let ((target (expand-file-name (file-name-nondirectory file) newname))
+	      (filetype (car (file-attributes file))))
+	  (cond
+	   ((eq filetype t)       ; Directory but not a symlink.
+	    (copy-directory file newname keep-time parents))
+	   ((stringp filetype)    ; Symbolic link
+	    (make-symbolic-link filetype target t))
+	   ((copy-file file target t keep-time)))))
 
       ;; Set directory attributes.
       (let ((modes (file-modes directory))
@@ -6281,7 +6288,11 @@ be a predicate function such as `yes-or-no-p'."
 
 (defun save-buffers-kill-emacs (&optional arg)
   "Offer to save each buffer, then kill this Emacs process.
-With prefix ARG, silently save all file-visiting buffers, then kill."
+With prefix ARG, silently save all file-visiting buffers without asking.
+If there are active processes where `process-query-on-exit-flag'
+returns non-nil, asks whether processes should be killed.
+Runs the members of `kill-emacs-query-functions' in turn and stops
+if any returns nil.  If `confirm-kill-emacs' is non-nil, calls it."
   (interactive "P")
   (save-some-buffers arg t)
   (and (or (not (memq t (mapcar (function
@@ -6554,7 +6565,7 @@ Otherwise, trash FILENAME using the freedesktop.org conventions,
 		(new-fn      (expand-file-name (file-name-nondirectory fn)
 					       trash-dir)))
 	   ;; We can't trash a parent directory of trash-directory.
-	   (if (string-match fn trash-dir)
+	   (if (string-prefix-p fn trash-dir)
 	       (error "Trash directory `%s' is a subdirectory of `%s'"
 		      trash-dir filename))
 	   (unless (file-directory-p trash-dir)
@@ -6586,10 +6597,10 @@ Otherwise, trash FILENAME using the freedesktop.org conventions,
 				     (file-name-directory fn)))
 	     (error "Cannot move %s to trash: Permission denied" filename))
 	   ;; The trashed file cannot be the trash dir or its parent.
-	   (if (string-match fn trash-files-dir)
+	   (if (string-prefix-p fn trash-files-dir)
 	       (error "The trash directory %s is a subdirectory of %s"
 		      trash-files-dir filename))
-	   (if (string-match fn trash-info-dir)
+	   (if (string-prefix-p fn trash-info-dir)
 	       (error "The trash directory %s is a subdirectory of %s"
 		      trash-info-dir filename))
 

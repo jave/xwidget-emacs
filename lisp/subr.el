@@ -871,6 +871,7 @@ The normal global definition of the character C-x indirects to this keymap.")
 (defsubst eventp (obj)
   "True if the argument is an event object."
   (or (and (integerp obj)
+           ;; FIXME: Why bother?
 	   ;; Filter out integers too large to be events.
 	   ;; M is the biggest modifier.
 	   (zerop (logand obj (lognot (1- (lsh ?\M-\^@ 1)))))
@@ -1785,6 +1786,8 @@ this name matching.
 
 Alternatively, FILE can be a feature (i.e. a symbol), in which case FORM
 is evaluated at the end of any file that `provide's this feature.
+If the feature is provided when evaluating code not associated with a
+file, FORM is evaluated immediately after the provide statement.
 
 Usually FILE is just a library name like \"font-lock\" or a feature name
 like 'font-lock.
@@ -1814,14 +1817,16 @@ This function makes or adds to an entry on `after-load-alist'."
 	;; make sure that `form' is really run "after-load" in case the provide
 	;; call happens early.
 	(setq form
-	      `(when load-file-name
-		 (let ((fun (make-symbol "eval-after-load-helper")))
-		   (fset fun `(lambda (file)
-				(if (not (equal file ',load-file-name))
-				    nil
-				  (remove-hook 'after-load-functions ',fun)
-				  ,',form)))
-		   (add-hook 'after-load-functions fun)))))
+	      `(if load-file-name
+		   (let ((fun (make-symbol "eval-after-load-helper")))
+		     (fset fun `(lambda (file)
+				  (if (not (equal file ',load-file-name))
+				      nil
+				    (remove-hook 'after-load-functions ',fun)
+				    ,',form)))
+		     (add-hook 'after-load-functions fun))
+		 ;; Not being provided from a file, run form right now.
+		 ,form)))
       ;; Add FORM to the element unless it's already there.
       (unless (member form (cdr elt))
 	(nconc elt (purecopy (list form)))))))
@@ -1889,9 +1894,10 @@ Used from `delayed-warnings-hook' (which see)."
 ;; Ref http://lists.gnu.org/archive/html/emacs-devel/2012-02/msg00085.html
 (defvar delayed-warnings-hook '(collapse-delayed-warnings
                                 display-delayed-warnings)
-  "Normal hook run to process delayed warnings.
-Functions in this hook should access the `delayed-warnings-list'
-variable (which see) and remove from it the warnings they process.")
+  "Normal hook run to process and display delayed warnings.
+By default, this hook contains functions to consolidate the
+warnings listed in `delayed-warnings-list', display them, and set
+`delayed-warnings-list' back to nil.")
 
 
 ;;;; Process stuff.
@@ -1963,7 +1969,7 @@ It can be retrieved with `(process-get PROCESS PROPNAME)'."
 ;;;; Input and display facilities.
 
 (defvar read-quoted-char-radix 8
-  "*Radix for \\[quoted-insert] and other uses of `read-quoted-char'.
+  "Radix for \\[quoted-insert] and other uses of `read-quoted-char'.
 Legitimate radix values are 8, 10 and 16.")
 
 (custom-declare-variable-early
@@ -1984,6 +1990,10 @@ obey the input decoding and translations usually done by `read-key-sequence'.
 So escape sequences and keyboard encoding are taken into account.
 When there's an ambiguity because the key looks like the prefix of
 some sort of escape sequence, the ambiguity is resolved via `read-key-delay'."
+  ;; This overriding-terminal-local-map binding also happens to
+  ;; disable quail's input methods, so although read-key-sequence
+  ;; always inherits the input method, in practice read-key does not
+  ;; inherit the input method (at least not if it's based on quail).
   (let ((overriding-terminal-local-map read-key-empty-map)
 	(overriding-local-map nil)
         (echo-keystrokes 0)
@@ -2088,77 +2098,45 @@ Optional DEFAULT is a default password to use instead of empty input.
 
 This function echoes `.' for each character that the user types.
 
-The user ends with RET, LFD, or ESC.  DEL or C-h rubs out.
-C-y yanks the current kill.  C-u kills line.
-C-g quits; if `inhibit-quit' was non-nil around this function,
-then it returns nil if the user types C-g, but `quit-flag' remains set.
-
 Once the caller uses the password, it can erase the password
 by doing (clear-string STRING)."
-  (with-local-quit
-    (if confirm
-	(let (success)
-	  (while (not success)
-	    (let ((first (read-passwd prompt nil default))
-		  (second (read-passwd "Confirm password: " nil default)))
-	      (if (equal first second)
-		  (progn
-		    (and (arrayp second) (clear-string second))
-		    (setq success first))
-		(and (arrayp first) (clear-string first))
-		(and (arrayp second) (clear-string second))
-		(message "Password not repeated accurately; please start over")
-		(sit-for 1))))
-	  success)
-      (let ((pass nil)
-	    ;; Copy it so that add-text-properties won't modify
-	    ;; the object that was passed in by the caller.
-	    (prompt (copy-sequence prompt))
-	    (c 0)
-	    (echo-keystrokes 0)
-	    (cursor-in-echo-area t)
-	    (message-log-max nil)
-	    (stop-keys (list 'return ?\r ?\n ?\e))
-	    (rubout-keys (list 'backspace ?\b ?\177)))
-	(add-text-properties 0 (length prompt)
-			     minibuffer-prompt-properties prompt)
-	(while (progn (message "%s%s"
-			       prompt
-			       (make-string (length pass) ?.))
-		      (setq c (read-key))
-		      (not (memq c stop-keys)))
-	  (clear-this-command-keys)
-	  (cond ((memq c rubout-keys) ; rubout
-		 (when (> (length pass) 0)
-		   (let ((new-pass (substring pass 0 -1)))
-		     (and (arrayp pass) (clear-string pass))
-		     (setq pass new-pass))))
-                ((eq c ?\C-g) (keyboard-quit))
-		((not (numberp c)))
-		((= c ?\C-u) ; kill line
-		 (and (arrayp pass) (clear-string pass))
-		 (setq pass ""))
-		((= c ?\C-y) ; yank
-		 (let* ((str (condition-case nil
-				 (current-kill 0)
-			       (error nil)))
-			new-pass)
-		   (when str
-		     (setq new-pass
-			   (concat pass
-				   (substring-no-properties str)))
-		     (and (arrayp pass) (clear-string pass))
-		     (setq c ?\0)
-		     (setq pass new-pass))))
-		((characterp c) ; insert char
-		 (let* ((new-char (char-to-string c))
-			(new-pass (concat pass new-char)))
-		   (and (arrayp pass) (clear-string pass))
-		   (clear-string new-char)
-		   (setq c ?\0)
-		   (setq pass new-pass)))))
-	(message nil)
-	(or pass default "")))))
+  (if confirm
+      (let (success)
+        (while (not success)
+          (let ((first (read-passwd prompt nil default))
+                (second (read-passwd "Confirm password: " nil default)))
+            (if (equal first second)
+                (progn
+                  (and (arrayp second) (clear-string second))
+                  (setq success first))
+              (and (arrayp first) (clear-string first))
+              (and (arrayp second) (clear-string second))
+              (message "Password not repeated accurately; please start over")
+              (sit-for 1))))
+        success)
+    (let (minibuf)
+      (minibuffer-with-setup-hook
+          (lambda ()
+            (setq minibuf (current-buffer))
+            ;; Turn off electricity.
+            (set (make-local-variable 'post-self-insert-hook) nil)
+            (add-hook 'after-change-functions
+                      (lambda (beg end len)
+                        (clear-this-command-keys)
+                        (setq beg (min end (max (minibuffer-prompt-end)
+                                                beg)))
+                        (dotimes (i (- end beg))
+                          (put-text-property (+ i beg) (+ 1 i beg)
+                                             'display (string ?.))))
+                      nil t))
+        (unwind-protect
+            (read-string prompt nil
+                         (let ((sym (make-symbol "forget-history")))
+                           (set sym nil)
+                           sym)
+                         default)
+          (when (buffer-live-p minibuf)
+            (with-current-buffer minibuf (erase-buffer))))))))
 
 ;; This should be used by `call-interactively' for `n' specs.
 (defun read-number (prompt &optional default)
@@ -3026,13 +3004,12 @@ the buffer list."
 	   (set-buffer ,old-buffer))))))
 
 (defmacro save-window-excursion (&rest body)
-  "Execute BODY, preserving window sizes and contents.
-Return the value of the last form in BODY.
-Restore which buffer appears in which window, where display starts,
-and the value of point and mark for each window.
-Also restore the choice of selected window.
-Also restore which buffer is current.
-Does not restore the value of point in current buffer.
+  "Execute BODY, then restore previous window configuration.
+This macro saves the window configuration on the selected frame,
+executes BODY, then calls `set-window-configuration' to restore
+the saved window configuration.  The return value is the last
+form in BODY.  The window configuration is also restored if BODY
+exits nonlocally.
 
 BEWARE: Most uses of this macro introduce bugs.
 E.g. it should not be used to try and prevent some code from opening
@@ -3553,8 +3530,7 @@ of STRING.
 To replace only the first match (if any), make REGEXP match up to \\'
 and replace a sub-expression, e.g.
   (replace-regexp-in-string \"\\\\(foo\\\\).*\\\\'\" \"bar\" \" foo foo\" nil nil 1)
-    => \" bar foo\"
-"
+    => \" bar foo\""
 
   ;; To avoid excessive consing from multiple matches in long strings,
   ;; don't just call `replace-match' continually.  Walk down the

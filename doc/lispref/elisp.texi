@@ -123,7 +123,7 @@ Cover art by Etienne Suvasa.
 * Functions::               A function is a Lisp program
                               that can be invoked from other functions.
 * Macros::                  Macros are a way to extend the Lisp language.
-* Customization::           Writing customization declarations.
+* Customization::           Making variables and faces customizable.
 
 * Loading::                 Reading files of Lisp code into Lisp.
 * Byte Compilation::        Compilation makes programs run faster.
@@ -163,7 +163,7 @@ Cover art by Etienne Suvasa.
 
 Appendices
 
-* Antinews::                Info for users downgrading to Emacs 22.
+* Antinews::                Info for users downgrading to Emacs 23.
 * GNU Free Documentation License:: The license for this documentation.
 * GPL::                     Conditions for copying and changing GNU Emacs.
 * Tips::                    Advice and coding conventions for Emacs Lisp.
@@ -500,6 +500,8 @@ Writing Customization Definitions
 * Group Definitions::       Writing customization group definitions.
 * Variable Definitions::    Declaring user options.
 * Customization Types::     Specifying the type of a user option.
+* Applying Customizations:: Functions to apply customization settings.
+* Custom Themes::           Writing Custom themes.
 
 Customization Types
 
@@ -649,8 +651,8 @@ Completion
                               (reading buffer name, file name, etc.).
 * Reading File Names::      Using completion to read file names and
                               shell commands.
-* Completion Styles::       Specifying rules for performing completion.
-* Programmed Completion::   Writing your own completion-function.
+* Completion Variables::    Variables controlling completion behavior.
+* Programmed Completion::   Writing your own completion function.
 * Completion in Buffers::   Completing text in ordinary buffers.
 
 Command Loop
@@ -1054,7 +1056,8 @@ Text
 * Registers::               How registers are implemented.  Accessing
                               the text or position stored in a register.
 * Base 64::                 Conversion to or from base 64 encoding.
-* Checksum/Hash::           Computing "message digests"/"checksums"/"hashes".
+* Checksum/Hash::           Computing cryptographic hashes.
+* Parsing HTML/XML::        Parsing HTML and XML.
 * Atomic Changes::          Installing several buffer changes "atomically".
 * Change Hooks::            Supplying functions to be run when text is changed.
 
@@ -1264,14 +1267,11 @@ Emacs Display
 * Buttons::                 Adding clickable buttons to Emacs buffers.
 * Abstract Display::        Emacs's Widget for Object Collections.
 * Blinking::                How Emacs shows the matching open parenthesis.
-* Usual Display::           The usual conventions for displaying
-                              nonprinting chars.
-* Display Tables::          How to specify other conventions.
+* Character Display::   How Emacs displays individual characters.
 * Beeping::                 Audible signal to the user.
 * Window Systems::          Which window system is being used.
 * Bidirectional Display::   Display of bidirectional scripts, such as
                               Arabic and Farsi.
-* Glyphless Chars::         How glyphless characters are drawn.
 
 The Echo Area
 
@@ -1286,6 +1286,7 @@ Reporting Warnings
 * Warning Variables::       Variables programs bind to customize
                               their warnings.
 * Warning Options::         Variables users set to control display of warnings.
+* Delayed Warnings::        Deferring a warning until the end of a command.
 
 Overlays
 
@@ -1296,7 +1297,7 @@ Overlays
 
 Faces
 
-* Defining Faces::          How to define a face with @code{defface}.
+* Defining Faces::          How to define a face.
 * Face Attributes::         What is in a face?
 * Attribute Functions::     Functions to examine and set face attributes.
 * Displaying Faces::        How Emacs combines the faces specified for
@@ -1360,11 +1361,13 @@ Abstract Display
 * Abstract Display Functions::  Functions in the Ewoc package.
 * Abstract Display Example::    Example of using Ewoc.
 
-Display Tables
+Character Display
 
-* Display Table Format::    What a display table consists of.
-* Active Display Table::    How Emacs selects a display table to use.
-* Glyphs::                  How to define a glyph, and what glyphs mean.
+* Usual Display::       The usual conventions for displaying characters.
+* Display Tables::      What a display table consists of.
+* Active Display Table::  How Emacs selects a display table to use.
+* Glyphs::              How to define a glyph, and what glyphs mean.
+* Glyphless Chars::     How glyphless characters are drawn.
 
 Operating System Interface
 
@@ -1390,6 +1393,8 @@ Operating System Interface
 * Batch Mode::              Running Emacs without terminal interaction.
 * Session Management::      Saving and restoring state with
                               X Session Management.
+* Notifications::           Desktop notifications.
+* Dynamic Libraries::       On-demand loading of support libraries.
 
 Preparing Lisp code for distribution
 

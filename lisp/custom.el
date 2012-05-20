@@ -599,15 +599,17 @@ If NOSET is non-nil, don't bother autoloading LOAD when setting the variable."
   (put symbol 'custom-autoload (if noset 'noset t))
   (custom-add-load symbol load))
 
-;; This test is also in the C code of `user-variable-p'.
 (defun custom-variable-p (variable)
   "Return non-nil if VARIABLE is a customizable variable.
 A customizable variable is either (i) a variable whose property
 list contains a non-nil `standard-value' or `custom-autoload'
 property, or (ii) an alias for another customizable variable."
-  (setq variable (indirect-variable variable))
-  (or (get variable 'standard-value)
-      (get variable 'custom-autoload)))
+  (when (symbolp variable)
+    (setq variable (indirect-variable variable))
+    (or (get variable 'standard-value)
+	(get variable 'custom-autoload))))
+
+(define-obsolete-function-alias 'user-variable-p 'custom-variable-p "24.2")
 
 (defun custom-note-var-changed (variable)
   "Inform Custom that VARIABLE has been set (changed).
@@ -934,16 +936,21 @@ Each of the arguments in ARGS should be a list of this form:
 
   (SYMBOL EXP [NOW [REQUEST [COMMENT]]])
 
-This stores EXP (without evaluating it) as the saved value for SYMBOL.
-If NOW is present and non-nil, then also evaluate EXP and set
-the default value for the SYMBOL to the value of EXP.
+SYMBOL is the variable name, and EXP is an expression which
+evaluates to the customized value.  EXP will also be stored,
+without evaluating it, in SYMBOL's `saved-value' property, so
+that it can be restored via the Customize interface.  It is also
+added to the alist in SYMBOL's `theme-value' property \(by
+calling `custom-push-theme').
 
-REQUEST is a list of features we must require in order to
-handle SYMBOL properly.
-COMMENT is a comment string about SYMBOL.
+NOW, if present and non-nil, means to install the variable's
+value directly now, even if its `defcustom' declaration has not
+been executed.  This is for internal use only.
 
-EXP itself is saved unevaluated as SYMBOL property `saved-value' and
-in SYMBOL's list property `theme-value' \(using `custom-push-theme')."
+REQUEST is a list of features to `require' (which are loaded
+prior to evaluating EXP).
+
+COMMENT is a comment string about SYMBOL."
   (custom-check-theme theme)
 
   ;; Process all the needed autoloads before anything else, so that the
@@ -1143,8 +1150,9 @@ prompt the user for confirmation before loading it.  But if
 optional arg NO-CONFIRM is non-nil, load the theme without
 prompting.
 
-Normally, this function also enables THEME; if optional arg
-NO-ENABLE is non-nil, load the theme but don't enable it.
+Normally, this function also enables THEME.  If optional arg
+NO-ENABLE is non-nil, load the theme but don't enable it, unless
+the theme was already enabled.
 
 This function is normally called through Customize when setting
 `custom-enabled-themes'.  If used directly in your init file, it
@@ -1160,6 +1168,10 @@ Return t if THEME was successfully loaded, nil otherwise."
     nil nil))
   (unless (custom-theme-name-valid-p theme)
     (error "Invalid theme name `%s'" theme))
+  ;; If THEME is already enabled, re-enable it after loading, even if
+  ;; NO-ENABLE is t.
+  (if no-enable
+      (setq no-enable (not (custom-theme-enabled-p theme))))
   ;; If reloading, clear out the old theme settings.
   (when (custom-theme-p theme)
     (disable-theme theme)

@@ -65,6 +65,8 @@ once you are familiar with the contents of the startup screen."
 
 (defvar startup-screen-inhibit-startup-screen nil)
 
+;; FIXME? Why does this get such weirdly extreme treatment, when the
+;; more important inhibit-startup-screen does not.
 (defcustom inhibit-startup-echo-area-message nil
   "Non-nil inhibits the initial startup echo area message.
 Setting this variable takes effect
@@ -337,7 +339,9 @@ this variable usefully is to set it while building and dumping Emacs."
 	  (error "Customizing `site-run-file' does not work")))
 
 (defcustom mail-host-address nil
-  "Name of this machine, for purposes of naming users."
+  "Name of this machine, for purposes of naming users.
+If non-nil, Emacs uses this instead of `system-name' when constructing
+email addresses."
   :type '(choice (const nil) string)
   :group 'mail)
 
@@ -464,6 +468,10 @@ DIRS are relative."
       (setcdr tail (append (mapcar 'expand-file-name dirs) (cdr tail))))))
 
 (defun normal-top-level ()
+  "Emacs calls this function when it first starts up.
+It sets `command-line-processed', processes the command-line,
+reads the initialization files, etc.
+It is the default value of the variable `top-level'."
   (if command-line-processed
       (message "Back to top level.")
     (setq command-line-processed t)
@@ -482,13 +490,20 @@ DIRS are relative."
     ;; of that dir into load-path,
     ;; Look for a leim-list.el file too.  Loading it will register
     ;; available input methods.
-    (let ((tail load-path) dir)
+    (let ((tail load-path)
+          (lispdir (expand-file-name "../lisp" data-directory))
+	  ;; For out-of-tree builds, leim-list is generated in the build dir.
+;;;          (leimdir (expand-file-name "../leim" doc-directory))
+          dir)
       (while tail
         (setq dir (car tail))
         (let ((default-directory dir))
           (load (expand-file-name "subdirs.el") t t t))
-        (let ((default-directory dir))
-          (load (expand-file-name "leim-list.el") t t t))
+	;; Do not scan standard directories that won't contain a leim-list.el.
+	;; http://lists.gnu.org/archive/html/emacs-devel/2009-10/msg00502.html
+	(or (string-match (concat "\\`" lispdir) dir)
+	    (let ((default-directory dir))
+	      (load (expand-file-name "leim-list.el") t t t)))
         ;; We don't use a dolist loop and we put this "setq-cdr" command at
         ;; the end, because the subdirs.el files may add elements to the end
         ;; of load-path and we want to take it into account.
@@ -701,6 +716,8 @@ opening the first frame (e.g. open a connection to an X server).")
 (defvar server-process)
 
 (defun command-line ()
+  "A subroutine of `normal-top-level'.
+Amongst another things, it parses the command-line arguments."
   (setq before-init-time (current-time)
 	after-init-time nil
         command-line-default-directory default-directory)
@@ -1151,38 +1168,6 @@ the `--debug-init' option to view a complete error backtrace."
 				    (concat (user-login-name) "@"
 					    (or mail-host-address
 						(system-name))))))
-
-    ;; Originally face attributes were specified via
-    ;; `font-lock-face-attributes'.  Users then changed the default
-    ;; face attributes by setting that variable.  However, we try and
-    ;; be back-compatible and respect its value if set except for
-    ;; faces where M-x customize has been used to save changes for the
-    ;; face.
-    (when (boundp 'font-lock-face-attributes)
-      (let ((face-attributes font-lock-face-attributes))
-	(while face-attributes
-	  (let* ((face-attribute (pop face-attributes))
-		 (face (car face-attribute)))
-	    ;; Rustle up a `defface' SPEC from a
-	    ;; `font-lock-face-attributes' entry.
-	    (unless (get face 'saved-face)
-	      (let ((foreground (nth 1 face-attribute))
-		    (background (nth 2 face-attribute))
-		    (bold-p (nth 3 face-attribute))
-		    (italic-p (nth 4 face-attribute))
-		    (underline-p (nth 5 face-attribute))
-		    face-spec)
-		(when foreground
-		  (setq face-spec (cons ':foreground (cons foreground face-spec))))
-		(when background
-		  (setq face-spec (cons ':background (cons background face-spec))))
-		(when bold-p
-		  (setq face-spec (append '(:weight bold) face-spec)))
-		(when italic-p
-		  (setq face-spec (append '(:slant italic) face-spec)))
-		(when underline-p
-		  (setq face-spec (append '(:underline t) face-spec)))
-		(face-spec-set face (list (list t face-spec)) nil)))))))
 
     ;; If parameter have been changed in the init file which influence
     ;; face realization, clear the face cache so that new faces will
@@ -2076,6 +2061,7 @@ A fancy display is used on graphic displays, normal otherwise."
 (defalias 'display-splash-screen 'display-startup-screen)
 
 (defun command-line-1 (args-left)
+  "A subroutine of `command-line'."
   (display-startup-echo-area-message)
   (when (and pure-space-overflow
 	     (not noninteractive))
@@ -2330,6 +2316,7 @@ A fancy display is used on graphic displays, normal otherwise."
     (if (or inhibit-startup-screen
 	    initial-buffer-choice
 	    noninteractive
+            (daemonp)
 	    inhibit-x-resources)
 
 	;; Not displaying a startup screen.  If 3 or more files
@@ -2372,9 +2359,7 @@ A fancy display is used on graphic displays, normal otherwise."
       ;; (with-no-warnings
       ;; 	(setq menubar-bindings-done t))
 
-      (if (> file-count 0)
-	  (display-startup-screen t)
-	(display-startup-screen nil)))))
+      (display-startup-screen (> file-count 0)))))
 
 (defun command-line-normalize-file-name (file)
   "Collapse multiple slashes to one, to handle non-Emacs file names."

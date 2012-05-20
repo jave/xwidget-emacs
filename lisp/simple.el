@@ -1,6 +1,6 @@
 ;;; simple.el --- basic editing commands for Emacs
 
-;; Copyright (C) 1985-1987, 1993-2012  Free Software Foundation, Inc.
+;; Copyright (C) 1985-1987, 1993-2012 Free Software Foundation, Inc.
 
 ;; Maintainer: FSF
 ;; Keywords: internal
@@ -893,16 +893,23 @@ that uses or sets the mark."
 ;; Counting lines, one way or another.
 
 (defun goto-line (line &optional buffer)
-  "Goto LINE, counting from line 1 at beginning of buffer.
-Normally, move point in the current buffer, and leave mark at the
-previous position.  With just \\[universal-argument] as argument,
-move point in the most recently selected other buffer, and switch to it.
+  "Go to LINE, counting from line 1 at beginning of buffer.
+If called interactively, a numeric prefix argument specifies
+LINE; without a numeric prefix argument, read LINE from the
+minibuffer.
 
-If there's a number in the buffer at point, it is the default for LINE.
+If optional argument BUFFER is non-nil, switch to that buffer and
+move to line LINE there.  If called interactively with \\[universal-argument]
+as argument, BUFFER is the most recently selected other buffer.
+
+Prior to moving point, this function sets the mark (without
+activating it), unless Transient Mark mode is enabled and the
+mark is already active.
 
 This function is usually the wrong thing to use in a Lisp program.
 What you probably want instead is something like:
-  (goto-char (point-min)) (forward-line (1- N))
+  (goto-char (point-min))
+  (forward-line (1- N))
 If at all possible, an even better solution is to use char counts
 rather than line counts."
   (interactive
@@ -2143,7 +2150,7 @@ of `history-length', which see.")
   "Switch used to have the shell execute its command line argument.")
 
 (defvar shell-command-default-error-buffer nil
-  "*Buffer name for `shell-command' and `shell-command-on-region' error output.
+  "Buffer name for `shell-command' and `shell-command-on-region' error output.
 This buffer is used when `shell-command' or `shell-command-on-region'
 is run interactively.  A value of nil means that output to stderr and
 stdout will be intermixed in the output stream.")
@@ -2457,9 +2464,9 @@ COMMAND.
 To specify a coding system for converting non-ASCII characters
 in the input and output to the shell command, use \\[universal-coding-system-argument]
 before this command.  By default, the input (from the current buffer)
-is encoded in the same coding system that will be used to save the file,
-`buffer-file-coding-system'.  If the output is going to replace the region,
-then it is decoded from that same coding system.
+is encoded using coding-system specified by `process-coding-system-alist',
+falling back to `default-process-coding-system' if no match for COMMAND
+is found in `process-coding-system-alist'.
 
 The noninteractive arguments are START, END, COMMAND,
 OUTPUT-BUFFER, REPLACE, ERROR-BUFFER, and DISPLAY-ERROR-BUFFER.
@@ -2670,13 +2677,13 @@ value passed."
 (defvar process-file-side-effects t
   "Whether a call of `process-file' changes remote files.
 
-Per default, this variable is always set to `t', meaning that a
+By default, this variable is always set to `t', meaning that a
 call of `process-file' could potentially change any file on a
 remote host.  When set to `nil', a file handler could optimize
-its behavior with respect to remote file attributes caching.
+its behavior with respect to remote file attribute caching.
 
-This variable should never be changed by `setq'.  Instead of, it
-shall be set only by let-binding.")
+You should only ever change this variable with a let-binding;
+never with `setq'.")
 
 (defun start-file-process (name buffer program &rest program-args)
   "Start a program in a subprocess.  Return the process object for it.
@@ -3062,7 +3069,8 @@ before the Emacs kill and one can still paste it using \\[yank] \\[yank-pop]."
   :version "23.2")
 
 (defcustom kill-do-not-save-duplicates nil
-  "Do not add a new string to `kill-ring' when it is the same as the last one."
+  "Do not add a new string to `kill-ring' if it duplicates the last one.
+The comparison is done using `equal-including-properties'."
   :type 'boolean
   :group 'killing
   :version "23.2")
@@ -3090,7 +3098,10 @@ argument should still be a \"useful\" string for such uses."
 	(signal 'args-out-of-range
 		(list string "yank-handler specified for empty string"))))
   (unless (and kill-do-not-save-duplicates
-	       (equal string (car kill-ring)))
+	       ;; Due to text properties such as 'yank-handler that
+	       ;; can alter the contents to yank, comparison using
+	       ;; `equal' is unsafe.
+	       (equal-including-properties string (car kill-ring)))
     (if (fboundp 'menu-bar-update-yank-menu)
 	(menu-bar-update-yank-menu string (and replace (car kill-ring)))))
   (when save-interprogram-paste-before-kill
@@ -3101,10 +3112,10 @@ argument should still be a \"useful\" string for such uses."
 		       (nreverse interprogram-paste)
 		     (list interprogram-paste)))
 	  (unless (and kill-do-not-save-duplicates
-		       (equal s (car kill-ring)))
+		       (equal-including-properties s (car kill-ring)))
 	    (push s kill-ring))))))
   (unless (and kill-do-not-save-duplicates
-	       (equal string (car kill-ring)))
+	       (equal-including-properties string (car kill-ring)))
     (if (and replace kill-ring)
 	(setcar kill-ring string)
       (push string kill-ring)
@@ -3476,14 +3487,14 @@ and KILLP is t if a prefix arg was specified."
   "Kill up to and including ARGth occurrence of CHAR.
 Case is ignored if `case-fold-search' is non-nil in the current buffer.
 Goes backward if ARG is negative; error if CHAR not found."
-  (interactive "p\ncZap to char: ")
+  (interactive (list (prefix-numeric-value current-prefix-arg)
+		     (read-char "Zap to char: " t)))
   ;; Avoid "obsolete" warnings for translation-table-for-input.
   (with-no-warnings
     (if (char-table-p translation-table-for-input)
 	(setq char (or (aref translation-table-for-input char) char))))
   (kill-region (point) (progn
 			 (search-forward (char-to-string char) nil nil arg)
-;			 (goto-char (if (> arg 0) (1- (point)) (1+ (point))))
 			 (point))))
 
 ;; kill-line and its subroutines.
@@ -3677,7 +3688,8 @@ If ARG is zero, move to the beginning of the current line."
 			(assq prop buffer-invisibility-spec))))))
     (skip-chars-forward "^\n")
     (if (get-text-property (point) 'invisible)
-	(goto-char (next-single-property-change (point) 'invisible))
+	(goto-char (or (next-single-property-change (point) 'invisible)
+		       (point-max)))
       (goto-char (next-overlay-change (point))))
     (end-of-line)))
 
@@ -5309,7 +5321,7 @@ Returns t if it really did any work."
       t)))
 
 (defvar comment-line-break-function 'comment-indent-new-line
-  "*Mode-specific function which line breaks and continues a comment.
+  "Mode-specific function which line breaks and continues a comment.
 This function is called during auto-filling when a comment syntax
 is defined.
 The function should take a single optional argument, which is a flag
@@ -5971,7 +5983,7 @@ in the definition is used to check that VALUE is valid.
 With a prefix argument, set VARIABLE to VALUE buffer-locally."
   (interactive
    (let* ((default-var (variable-at-point))
-          (var (if (user-variable-p default-var)
+          (var (if (custom-variable-p default-var)
 		   (read-variable (format "Set variable (default %s): " default-var)
 				  default-var)
 		 (read-variable "Set variable: ")))

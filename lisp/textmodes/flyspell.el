@@ -436,7 +436,7 @@ like <img alt=\"Some thing.\">."
 
 ;; dash character machinery
 (defvar flyspell-consider-dash-as-word-delimiter-flag nil
-   "*Non-nil means that the `-' char is considered as a word delimiter.")
+  "Non-nil means that the `-' char is considered as a word delimiter.")
 (make-variable-buffer-local 'flyspell-consider-dash-as-word-delimiter-flag)
 (defvar flyspell-dash-dictionary nil)
 (make-variable-buffer-local 'flyspell-dash-dictionary)
@@ -1576,10 +1576,11 @@ The buffer to mark them in is `flyspell-large-region-buffer'."
       (if ispell-encoding8-command
 	  (setq args
 		(append args
-			(list
-			 (concat ispell-encoding8-command
-				 (symbol-name
-				  encoding))))))
+			(if ispell-really-hunspell
+			    (list ispell-encoding8-command
+				  (upcase (symbol-name encoding)))
+			  (list (concat ispell-encoding8-command
+					(symbol-name encoding)))))))
 
       (let ((process-coding-system-alist (list (cons "\\.*" encoding))))
 	(setq c (apply 'ispell-call-process-region beg

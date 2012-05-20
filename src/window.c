@@ -124,9 +124,6 @@ static int window_initialized;
 /* Hook to run when window config changes.  */
 static Lisp_Object Qwindow_configuration_change_hook;
 
-/* If non-nil, run_window_configuration_change_hook does nothing.  */
-Lisp_Object inhibit_window_configuration_change_hook;
-
 /* Used by the function window_scroll_pixel_based */
 static int window_scroll_pixel_based_preserve_x;
 static int window_scroll_pixel_based_preserve_y;
@@ -2570,6 +2567,7 @@ window-start value is reasonable when this function is called.  */)
   Lisp_Object sibling, pwindow, swindow IF_LINT (= Qnil), delta;
   EMACS_INT startpos IF_LINT (= 0);
   int top IF_LINT (= 0), new_top, resize_failed;
+  Mouse_HLInfo *hlinfo;
 
   w = decode_any_window (window);
   XSETWINDOW (window, w);
@@ -2650,6 +2648,20 @@ window-start value is reasonable when this function is called.  */)
     }
 
   BLOCK_INPUT;
+  hlinfo = MOUSE_HL_INFO (f);
+  /* We are going to free the glyph matrices of WINDOW, and with that
+     we might lose any information about glyph rows that have some of
+     their glyphs highlighted in mouse face.  (These rows are marked
+     with a non-zero mouse_face_p flag.)  If WINDOW indeed has some
+     glyphs highlighted in mouse face, signal to frame's up-to-date
+     hook that mouse highlight was overwritten, so that it will
+     arrange for redisplaying the highlight.  */
+  if (EQ (hlinfo->mouse_face_window, window))
+    {
+      hlinfo->mouse_face_beg_row = hlinfo->mouse_face_beg_col = -1;
+      hlinfo->mouse_face_end_row = hlinfo->mouse_face_end_col = -1;
+      hlinfo->mouse_face_window = Qnil;
+    }
   free_window_matrices (r);
 
   windows_or_buffers_changed++;
@@ -2899,7 +2911,7 @@ run_window_configuration_change_hook (struct frame *f)
     = Fdefault_value (Qwindow_configuration_change_hook);
   XSETFRAME (frame, f);
 
-  if (NILP (Vrun_hooks) || !NILP (inhibit_window_configuration_change_hook))
+  if (NILP (Vrun_hooks) || !NILP (inhibit_lisp_code))
     return;
 
   /* Use the right buffer.  Matters when running the local hooks.  */
@@ -5938,6 +5950,8 @@ save_window_save (Lisp_Object window, struct Lisp_Vector *vector, int i)
 	    }
 	  else
 	    p->pointm = Fcopy_marker (w->pointm, Qnil);
+	  XMARKER (p->pointm)->insertion_type
+	    = !NILP (Vwindow_point_insertion_type);
 
 	  p->start = Fcopy_marker (w->start, Qnil);
 	  p->start_at_line_beg = w->start_at_line_beg;
@@ -6531,8 +6545,6 @@ syms_of_window (void)
   window_scroll_pixel_based_preserve_y = -1;
   window_scroll_preserve_hpos = -1;
   window_scroll_preserve_vpos = -1;
-
-  inhibit_window_configuration_change_hook = Qnil;
 
   DEFVAR_LISP ("temp-buffer-show-function", Vtemp_buffer_show_function,
 	       doc: /* Non-nil means call as function to display a help buffer.

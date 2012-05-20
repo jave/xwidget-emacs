@@ -139,12 +139,12 @@ for connections using SSL/TLS."
   :group 'rcirc)
 
 (defcustom rcirc-fill-flag t
-  "*Non-nil means line-wrap messages printed in channel buffers."
+  "Non-nil means line-wrap messages printed in channel buffers."
   :type 'boolean
   :group 'rcirc)
 
 (defcustom rcirc-fill-column nil
-  "*Column beyond which automatic line-wrapping should happen.
+  "Column beyond which automatic line-wrapping should happen.
 If nil, use value of `fill-column'.  If 'frame-width, use the
 maximum frame width."
   :type '(choice (const :tag "Value of `fill-column'")
@@ -153,7 +153,7 @@ maximum frame width."
   :group 'rcirc)
 
 (defcustom rcirc-fill-prefix nil
-  "*Text to insert before filled lines.
+  "Text to insert before filled lines.
 If nil, calculate the prefix dynamically to line up text
 underneath each nick."
   :type '(choice (const :tag "Dynamic" nil)
@@ -174,23 +174,23 @@ Use the command `rcirc-omit-mode' to change this variable.")
 (make-variable-buffer-local 'rcirc-omit-mode)
 
 (defcustom rcirc-time-format "%H:%M "
-  "*Describes how timestamps are printed.
+  "Describes how timestamps are printed.
 Used as the first arg to `format-time-string'."
   :type 'string
   :group 'rcirc)
 
 (defcustom rcirc-input-ring-size 1024
-  "*Size of input history ring."
+  "Size of input history ring."
   :type 'integer
   :group 'rcirc)
 
 (defcustom rcirc-read-only-flag t
-  "*Non-nil means make text in IRC buffers read-only."
+  "Non-nil means make text in IRC buffers read-only."
   :type 'boolean
   :group 'rcirc)
 
 (defcustom rcirc-buffer-maximum-lines nil
-  "*The maximum size in lines for rcirc buffers.
+  "The maximum size in lines for rcirc buffers.
 Channel buffers are truncated from the top to be no greater than this
 number.  If zero or nil, no truncating is done."
   :type '(choice (const :tag "No truncation" nil)
@@ -198,7 +198,7 @@ number.  If zero or nil, no truncating is done."
   :group 'rcirc)
 
 (defcustom rcirc-scroll-show-maximum-output t
-  "*If non-nil, scroll buffer to keep the point at the bottom of
+  "If non-nil, scroll buffer to keep the point at the bottom of
 the window."
   :type 'boolean
   :group 'rcirc)
@@ -244,13 +244,13 @@ Examples:
   :group 'rcirc)
 
 (defcustom rcirc-auto-authenticate-flag t
-  "*Non-nil means automatically send authentication string to server.
+  "Non-nil means automatically send authentication string to server.
 See also `rcirc-authinfo'."
   :type 'boolean
   :group 'rcirc)
 
 (defcustom rcirc-authenticate-before-join t
-  "*Non-nil means authenticate to services before joining channels.
+  "Non-nil means authenticate to services before joining channels.
 Currently only works with NickServ on some networks."
   :version "24.1"
   :type 'boolean
@@ -359,6 +359,14 @@ of a line.  The string is passed as the first argument to
 `format' with the nickname as the second argument."
   :version "24.1"
   :type 'string
+  :group 'rcirc)
+
+(defcustom rcirc-kill-channel-buffers nil
+  "When non-nil, kill channel buffers when the server buffer is killed.
+Only the channel buffers associated with the server in question
+will be killed."
+  :version "24.2"
+  :type 'boolean
   :group 'rcirc)
 
 (defvar rcirc-nick nil)
@@ -1088,12 +1096,20 @@ Logfiles are kept in `rcirc-log-directory'."
   :group 'rcirc)
 
 (defun rcirc-kill-buffer-hook ()
-  "Part the channel when killing an rcirc buffer."
+  "Part the channel when killing an rcirc buffer.
+
+If `rcirc-kill-channel-buffers' is non-nil and the killed buffer
+is a server buffer, kills all of the channel buffers associated
+with it."
   (when (eq major-mode 'rcirc-mode)
     (when (and rcirc-log-flag
                rcirc-log-directory)
       (rcirc-log-write))
-    (rcirc-clean-up-buffer "Killed buffer")))
+    (rcirc-clean-up-buffer "Killed buffer")
+    (when (and rcirc-buffer-alist ;; it's a server buffer
+               rcirc-kill-channel-buffers)
+      (dolist (channel rcirc-buffer-alist)
+	(kill-buffer (cdr channel))))))
 
 (defun rcirc-change-major-mode-hook ()
   "Part the channel when changing the major-mode."

@@ -241,6 +241,7 @@ Lisp_Object internal_last_event_frame;
 Time last_event_timestamp;
 
 static Lisp_Object Qx_set_selection, Qhandle_switch_frame;
+static Lisp_Object Qhandle_select_window;
 Lisp_Object QPRIMARY;
 
 static Lisp_Object Qself_insert_command;
@@ -1650,7 +1651,8 @@ command_loop_1 (void)
 		      ? EQ (CAR_SAFE (Vtransient_mark_mode), Qonly)
 		      : (!NILP (Vselect_active_regions)
 			 && !NILP (Vtransient_mark_mode)))
-		  && !EQ (Vthis_command, Qhandle_switch_frame))
+		  && NILP (Fmemq (Vthis_command,
+				  Vselection_inhibit_update_commands)))
 		{
 		  EMACS_INT beg =
 		    XINT (Fmarker_position (BVAR (current_buffer, mark)));
@@ -1882,7 +1884,7 @@ safe_run_hooks_error (Lisp_Object error_data)
     = CONSP (Vinhibit_quit) ? XCAR (Vinhibit_quit) : Vinhibit_quit;
   Lisp_Object fun = CONSP (Vinhibit_quit) ? XCDR (Vinhibit_quit) : Qnil;
   Lisp_Object args[4];
-  args[0] = build_string ("Error in %s (%s): %s");
+  args[0] = build_string ("Error in %s (%s): %S");
   args[1] = hook;
   args[2] = fun;
   args[3] = error_data;
@@ -10227,7 +10229,7 @@ DEFUN ("read-key-sequence-vector", Fread_key_sequence_vector,
 
   memset (keybuf, 0, sizeof keybuf);
   GCPRO1 (keybuf[0]);
-  gcpro1.nvars = (sizeof keybuf/sizeof (keybuf[0]));
+  gcpro1.nvars = (sizeof keybuf / sizeof (keybuf[0]));
 
   if (NILP (continue_echo))
     {
@@ -10241,7 +10243,7 @@ DEFUN ("read-key-sequence-vector", Fread_key_sequence_vector,
     cancel_hourglass ();
 #endif
 
-  i = read_key_sequence (keybuf, (sizeof keybuf/sizeof (keybuf[0])),
+  i = read_key_sequence (keybuf, (sizeof keybuf / sizeof (keybuf[0])),
 			 prompt, ! NILP (dont_downcase_last),
 			 ! NILP (can_return_switch_frame), 0);
 
@@ -10932,6 +10934,11 @@ interrupt_signal (int signalnum)	/* If we don't have an argument, some */
   errno = old_errno;
 }
 
+/* If Emacs is stuck because `inhibit-quit' is true, then keep track
+   of the number of times C-g has been requested.  If C-g is pressed
+   enough times, then quit anyway.  See bug#6585.  */
+static int force_quit_count;
+
 /* This routine is called at interrupt level in response to C-g.
 
    It is called from the SIGINT handler or kbd_buffer_store_event.
@@ -11050,8 +11057,16 @@ handle_interrupt (void)
 	  UNGCPRO;
 	}
       else
-	/* Else request quit when it's safe */
-	Vquit_flag = Qt;
+        { /* Else request quit when it's safe.  */
+          if (NILP (Vquit_flag))
+	    force_quit_count = 0;
+	  if (++force_quit_count == 3)
+            {
+              immediate_quit = 1;
+              Vinhibit_quit = Qnil;
+            }
+          Vquit_flag = Qt;
+        }
     }
 
 /* TODO: The longjmp in this call throws the NS event loop integration off,
@@ -11669,6 +11684,7 @@ syms_of_keyboard (void)
   DEFSYM (Qx_set_selection, "x-set-selection");
   DEFSYM (QPRIMARY, "PRIMARY");
   DEFSYM (Qhandle_switch_frame, "handle-switch-frame");
+  DEFSYM (Qhandle_select_window, "handle-select-window");
 
   DEFSYM (Qinput_method_function, "input-method-function");
   DEFSYM (Qinput_method_exit_on_first_char, "input-method-exit-on-first-char");
@@ -12185,7 +12201,7 @@ whenever `deferred-action-list' is non-nil.  */);
   Vdeferred_action_function = Qnil;
 
   DEFVAR_LISP ("delayed-warnings-list", Vdelayed_warnings_list,
-               doc: /* List of warnings to be displayed as soon as possible.
+               doc: /* List of warnings to be displayed after this command.
 Each element must be a list (TYPE MESSAGE [LEVEL [BUFFER-NAME]]),
 as per the args of `display-warning' (which see).
 If this variable is non-nil, `delayed-warnings-hook' will be run
@@ -12304,6 +12320,16 @@ If `select-active-regions' is non-nil, Emacs sets this to the
 text in the region before modifying the buffer.  The next
 `deactivate-mark' call uses this to set the window selection.  */);
   Vsaved_region_selection = Qnil;
+
+  DEFVAR_LISP ("selection-inhibit-update-commands",
+	       Vselection_inhibit_update_commands,
+	       doc: /* List of commands which should not update the selection.
+Normally, if `select-active-regions' is non-nil and the mark remains
+active after a command (i.e. the mark was not deactivated), the Emacs
+command loop sets the selection to the text in the region.  However,
+if the command is in this list, the selection is not updated.  */);
+  Vselection_inhibit_update_commands
+    = list2 (Qhandle_switch_frame, Qhandle_select_window);
 
   DEFVAR_LISP ("debug-on-event",
                Vdebug_on_event,
