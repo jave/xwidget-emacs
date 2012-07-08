@@ -1324,7 +1324,8 @@ xwidget_spec_value ( Lisp_Object spec, Lisp_Object  key,
 }
 
 
-void      xwidget_view_delete_all_in_window(  struct window *w )
+void
+xwidget_view_delete_all_in_window (struct window *w)
 {
   struct xwidget_view* xv = NULL;
   for (int i = 0; i < MAX_XWIDGETS; i++){
@@ -1338,7 +1339,9 @@ void      xwidget_view_delete_all_in_window(  struct window *w )
 
 
 
-struct xwidget_view* xwidget_view_lookup(struct xwidget* xw,     struct window *w){
+struct xwidget_view*
+xwidget_view_lookup (struct xwidget* xw, struct window *w)
+{
   struct xwidget_view* xv = NULL;
   for (int i = 0; i < MAX_XWIDGETS; i++){
     xv = &xwidget_views[i];
