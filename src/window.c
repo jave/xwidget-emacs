@@ -43,7 +43,7 @@ along with GNU Emacs.  If not, see <http://www.gnu.org/licenses/>.  */
 #ifdef HAVE_X_WINDOWS
 #include "xterm.h"
 #endif	/* HAVE_X_WINDOWS */
-#ifdef WINDOWSNT
+#ifdef HAVE_NTGUI
 #include "w32term.h"
 #endif
 #ifdef MSDOS
@@ -1465,9 +1465,7 @@ if it isn't already recorded.  */)
 #endif
 
   if (! NILP (update)
-      && ! (! NILP (w->window_end_valid)
-	    && w->last_modified >= BUF_MODIFF (b)
-	    && w->last_overlay_modified >= BUF_OVERLAY_MODIFF (b))
+      && (windows_or_buffers_changed || NILP (w->window_end_valid))
       && !noninteractive)
     {
       struct text_pos startp;
@@ -3796,6 +3794,8 @@ resize_frame_windows (struct frame *f, int size, int horflag)
 	    (m, make_number (XINT (r->top_line) + XINT (r->total_lines)));
 	}
     }
+
+  windows_or_buffers_changed++;
 }
 
 
@@ -4212,6 +4212,7 @@ grow_mini_window (struct window *w, int delta)
       w->last_modified = 0;
       w->last_overlay_modified = 0;
 
+      windows_or_buffers_changed++;
       adjust_glyphs (f);
       unblock_input ();
     }
@@ -4249,6 +4250,7 @@ shrink_mini_window (struct window *w)
 	  w->last_modified = 0;
 	  w->last_overlay_modified = 0;
 
+	  windows_or_buffers_changed++;
 	  adjust_glyphs (f);
 	  unblock_input ();
 	}

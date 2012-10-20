@@ -1,15 +1,42 @@
+2012-10-15  Glenn Morris  <rgm@gnu.org>
+
+	* Makefile.in (install-man, install-etc):
+	Apply $TRANSFORM.  (Bug#12536#34)
+	(clean): Delete etc/emacs.tmpdesktop.
+
+2012-10-11  Kenichi Handa  <handa@gnu.org>
+
+	* .bzrignore: Add several files under admin/charsets.
+
+2012-10-08  Daniel Colascione  <dancol@dancol.org>
+
+	* configure.ac: Add --with-w32 as a window system option.  Limit
+	it to Cygwin for now.  Integrate w32 into the refactored window
+	system configuration and set TERM_HEADER to w32term.h when w32 is
+	configured.
+
+	(CYGWIN_OBJ): Add cygw32.o.
+
+2012-10-07  Jan Djärv  <jan.h.d@swipnet.se>
+
+	* configure.ac: Check that OSX is 10.4 or newer.
+
+2012-10-07  Paul Eggert  <eggert@cs.ucla.edu>
+
+	Improve sys_siglist detection.
+	* configure.ac (sys_siglist): Look for its decl in <signal.h>.
+	Otherwise, it's not found in either Fedora 17 or Solaris 11.
+
 2012-10-04  Paul Eggert  <eggert@cs.ucla.edu>
 
-	Port timers to OpenBSD, plus check for timer failures.
-	OpenBSD problem reported by Han Boetes.
-	* profiler.c (setup_cpu_timer): Check for failure of timer_settime
-	and/or setitimer.
-	(Fprofiler_cpu_stop): Don't assume HAVE_SETITIMER.
-	* syssignal.h (HAVE_ITIMERSPEC): New macro.  This is for platforms
-	like OpenBSD, which has timer_settime but does not declare it.
-	OpenBSD does not define SIGEV_SIGNAL, so use that when deciding
-	whether to use itimerspec-related primitives.  All uses of
-	HAVE_TIMER_SETTIME replaced with HAVE_ITIMERSPEC.
+	Merge from gnulib, incorporating:
+	2012-10-02 pselect: reject invalid file descriptors
+	2012-10-02 ptsname: reject invalid file descriptors
+	2012-10-02 manywarnings: cater to more gcc infelicities
+	2012-09-30 sockets, sys_stat: restore AC_C_INLINE
+	* lib/pselect.c, lib/stdlib.in.h, m4/manywarnings.m4, m4/pselect.m4:
+	* m4/stdlib_h.m4, m4/sys_stat_h.m4: Update from gnulib.
+	* lib/gnulib.mk, m4/gnulib-comp.m4: Regenerate.
 
 2012-09-30  Paul Eggert  <eggert@cs.ucla.edu>
 
