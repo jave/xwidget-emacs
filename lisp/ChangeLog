@@ -1,3 +1,83 @@
+2012-10-20  Chong Yidong  <cyd@gnu.org>
+
+	* vc/vc.el (vc-diff-internal): Set up Diff mode even if there are
+	no changes to show (Bug#12586).
+
+	* eshell/esh-cmd.el (eshell-rewrite-for-command): Copy the body
+	list explicitly (Bug#12571).
+
+2012-10-20  Arne Jørgensen  <arne@arnested.dk>
+
+	* progmodes/flymake.el (flymake-create-temp-inplace): Use
+	file-truename.
+
+2012-10-20  Eli Zaretskii  <eliz@gnu.org>
+
+	* loadup.el: Update comment about uncompiled Lisp files.  (Bug#12395)
+
+2012-10-20  Jay Belanger  <jay.p.belanger@gmail.com>
+
+	* calc/calc-units.el (math-extract-units): Properly extract powers
+	of units.
+
+2012-10-20  Daniel Colascione  <dancol@dancol.org>
+
+	* frame.el (make-frame): Set x-display-name as we used to in order
+	to unbreak creating an X11 frame from an Emacs daemon started
+	without a display.
+
+2012-10-19  Stefan Monnier  <monnier@iro.umontreal.ca>
+
+	* minibuffer.el (minibuffer-force-complete): Make the next completion use
+	the same completion-field (bug@12221).
+
+2012-10-19  Martin Rudalics  <rudalics@gmx.at>
+
+	* emacs-lisp/debug.el (debug): Record height of debugger window
+	also when debugger will be back (Bug#8789).
+
+2012-10-18  Chong Yidong  <cyd@gnu.org>
+
+	* progmodes/gdb-mi.el (gdb-display-buffer-other-frame-action):
+	Convert to defcustom.
+	(gdb-get-source-file): Don't bind pop-up-windows.
+
+	* progmodes/gud.el (gud-display-line): Don't specially re-use
+	other frames for the gdb-mi case (Bug#12648).
+
+2012-10-18  Stefan Monnier  <monnier@iro.umontreal.ca>
+
+	* emacs-lisp/advice.el: Clean up commentary a bit.
+	(ad-do-advised-functions, ad-with-originals): Use `declare'.
+	(byte-code-function-p): Never redefine.
+
+	* emacs-lisp/gv.el (cond): Same fix as before for `if'.
+
+2012-10-18  Glenn Morris  <rgm@gnu.org>
+
+	* dired.el (dired-sort-toggle): Some ls implementations only allow
+	a single option string.  (Bug#12666)
+
+	* minibuffer.el (completion-cycle-threshold): Doc fix.
+
+2012-10-17  Kenichi Handa  <handa@gnu.org>
+
+	* international/mule.el (set-keyboard-coding-system):
+	Recover input meta mode when the new coding system doesn not use 8-bit.
+	Supply TERMINAL arg to set-input-meta-mode.
+
+2012-10-17  Michael Heerdegen <michael_heerdegen@web.de>  (tiny change)
+
+	* wdired.el (wdired-old-marks): New variable.
+	(wdired-change-to-wdired-mode): Locally set wdired-old-marks.
+	(wdired-do-renames): Move point with renamed file and don't lose
+	mark status (Bug#11795).
+
+2012-10-16  Juri Linkov  <juri@jurta.org>
+
+	* replace.el (query-replace-help): Mention multi-buffer replacement
+	keys in the Help message.  (Bug#12655)
+
 2012-10-15  Chong Yidong  <cyd@gnu.org>
 
 	* emacs-lisp/byte-run.el (defsubst): Doc fix.
@@ -599,9 +679,9 @@
 	* emacs-lisp/eieio-base.el (eieio-persistent-read): New input args
 	specifying the expected class, and whether subclassing is allowed.
 	(eieio-persistent-convert-list-to-object):
-        (eieio-persistent-validate/fix-slot-value)
-        (eieio-persistent-slot-type-is-class-p): New functions.
-        (eieio-named::slot-missing): Doc fix.
+	(eieio-persistent-validate/fix-slot-value)
+	(eieio-persistent-slot-type-is-class-p): New functions.
+	(eieio-named::slot-missing): Doc fix.
 
 	* emacs-lisp/eieio-datadebug.el (data-debug/eieio-insert-slots):
 	Stop using unused publd variable.
@@ -2044,7 +2124,7 @@
 
 	* ses.el (ses-widen):
 	* simple.el (count-words--buffer-message):
-	* net/browse-url.el (browse-url-of-buffer): Use it
+	* net/browse-url.el (browse-url-of-buffer): Use it.
 
 	* simple.el (count-words-region): Don't signal an error if there
 	is a non-nil prefix arg and the mark is not set.
@@ -16326,7 +16406,7 @@
 2011-06-22  Leo Liu  <sdl.web@gmail.com>
 
 	* minibuffer.el (completing-read-function)
-	(completing-read-default): Move from minibuf.c
+	(completing-read-default): Move from minibuf.c.
 
 2011-06-22  Richard Stallman  <rms@gnu.org>
 
@@ -18183,7 +18263,7 @@
 	Remove unnecessary and incorrect declarations.
 
 	* emacs-lisp/check-declare.el (check-declare-scan):
-	Handle byte-compile-initial-macro-environment in bytecomp.el
+	Handle byte-compile-initial-macro-environment in bytecomp.el.
 
 2011-05-05  Stefan Monnier  <monnier@iro.umontreal.ca>
 
