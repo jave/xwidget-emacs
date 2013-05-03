@@ -100,30 +100,34 @@ parenthetical grouping.")
   (list
    ;; Fontify all builtin keywords.
    (cons (concat "\\_<\\("
-		 (regexp-opt (append octave-reserved-words
+                 (regexp-opt (append octave-reserved-words
                                      octave-text-functions))
-		 "\\)\\_>")
-	 'font-lock-keyword-face)
+                 "\\)\\_>")
+         'font-lock-keyword-face)
    ;; Note: 'end' also serves as the last index in an indexing expression.
    ;; Ref: http://www.mathworks.com/help/matlab/ref/end.html
-   '("\\_<end\\_>" (0 (save-excursion
-                        (condition-case nil
-                            (progn
-                              (goto-char (match-beginning 0))
-                              (backward-up-list)
-                              (unless (eq (char-after) ?\()
-                                font-lock-keyword-face))
-                          (error font-lock-keyword-face)))
-                      t))
+   '((lambda (limit)
+       (while (re-search-forward "\\_<end\\_>" limit 'move)
+         (let ((beg (match-beginning 0))
+               (end (match-end 0)))
+           (unless (octave-in-string-or-comment-p)
+             (unwind-protect
+                 (progn
+                   (goto-char beg)
+                   (backward-up-list)
+                   (when (memq (char-after) '(?\( ?\[ ?\{))
+                     (put-text-property beg end 'face nil)))
+               (goto-char end)))))
+       nil))
    ;; Fontify all builtin operators.
    (cons "\\(&\\||\\|<=\\|>=\\|==\\|<\\|>\\|!=\\|!\\)"
-	 (if (boundp 'font-lock-builtin-face)
-	     'font-lock-builtin-face
-	   'font-lock-preprocessor-face))
+         (if (boundp 'font-lock-builtin-face)
+             'font-lock-builtin-face
+           'font-lock-preprocessor-face))
    ;; Fontify all function declarations.
    (list octave-function-header-regexp
-	 '(1 font-lock-keyword-face)
-	 '(3 font-lock-function-name-face nil t)))
+         '(1 font-lock-keyword-face)
+         '(3 font-lock-function-name-face nil t)))
   "Additional Octave expressions to highlight.")
 
 (defun octave-syntax-propertize-function (start end)
@@ -131,7 +135,7 @@ parenthetical grouping.")
   (octave-syntax-propertize-sqs end)
   (funcall (syntax-propertize-rules
             ;; Try to distinguish the string-quotes from the transpose-quotes.
-            ("[[({,; ]\\('\\)"
+            ("\\(?:^\\|[[({,; ]\\)\\('\\)"
              (1 (prog1 "\"'" (octave-syntax-propertize-sqs end)))))
            (point) end))
 
@@ -233,7 +237,7 @@ parenthetical grouping.")
     (modify-syntax-entry ?& "."   table)
     (modify-syntax-entry ?| "."   table)
     (modify-syntax-entry ?! "."   table)
-    (modify-syntax-entry ?\\ "\\" table)
+    (modify-syntax-entry ?\\ "."  table)
     (modify-syntax-entry ?\' "."  table)
     ;; Was "w" for abbrevs, but now that it's not necessary any more,
     (modify-syntax-entry ?\` "."  table)
@@ -553,13 +557,15 @@ See `comint-prompt-read-only' for details."
   :group 'octave
   :version "24.4")
 
-(defcustom inferior-octave-startup-file nil
+(defcustom inferior-octave-startup-file
+  (convert-standard-filename
+   (concat "~/.emacs-" (file-name-nondirectory inferior-octave-program)))
   "Name of the inferior Octave startup file.
 The contents of this file are sent to the inferior Octave process on
 startup."
-  :type '(choice (const :tag "None" nil)
-		 file)
-  :group 'octave)
+  :type '(choice (const :tag "None" nil) file)
+  :group 'octave
+  :version "24.4")
 
 (defcustom inferior-octave-startup-args nil
   "List of command line arguments for the inferior Octave process.
@@ -650,16 +656,14 @@ Additional commands to be executed on startup can be provided either in
 the file specified by `inferior-octave-startup-file' or by the default
 startup file, `~/.emacs-octave'."
   (interactive "P")
-  (let ((buffer inferior-octave-buffer))
-    (get-buffer-create buffer)
-    (if (comint-check-proc buffer)
-	()
+  (let ((buffer (get-buffer-create inferior-octave-buffer)))
+    (unless (comint-check-proc buffer)
       (with-current-buffer buffer
-	(comint-mode)
-	(inferior-octave-startup)
-	(inferior-octave-mode)))
-    (if (not arg)
-	(pop-to-buffer buffer))))
+        (inferior-octave-startup)
+        (inferior-octave-mode)))
+    (unless arg
+      (pop-to-buffer buffer))
+    buffer))
 
 ;;;###autoload
 (defalias 'run-octave 'inferior-octave)
@@ -667,17 +671,16 @@ startup file, `~/.emacs-octave'."
 (defun inferior-octave-startup ()
   "Start an inferior Octave process."
   (let ((proc (comint-exec-1
-	       (substring inferior-octave-buffer 1 -1)
-	       inferior-octave-buffer
-	       inferior-octave-program
-	       (append (list "-i" "--no-line-editing")
-		       inferior-octave-startup-args))))
+               (substring inferior-octave-buffer 1 -1)
+               inferior-octave-buffer
+               inferior-octave-program
+               (append (list "-i" "--no-line-editing")
+                       inferior-octave-startup-args))))
     (set-process-filter proc 'inferior-octave-output-digest)
-    (setq comint-ptyp process-connection-type
-	  inferior-octave-process proc
-	  inferior-octave-output-list nil
-	  inferior-octave-output-string nil
-	  inferior-octave-receive-in-progress t)
+    (setq inferior-octave-process proc
+          inferior-octave-output-list nil
+          inferior-octave-output-string nil
+          inferior-octave-receive-in-progress t)
 
     ;; This may look complicated ... However, we need to make sure that
     ;; we additional startup code only AFTER Octave is ready (otherwise,
@@ -691,35 +694,32 @@ startup file, `~/.emacs-octave'."
      (concat
       (if (not (bobp)) "\n")
       (if inferior-octave-output-list
-	  (concat (mapconcat
-		   'identity inferior-octave-output-list "\n")
-		  "\n"))))
+          (concat (mapconcat
+                   'identity inferior-octave-output-list "\n")
+                  "\n"))))
 
     ;; An empty secondary prompt, as e.g. obtained by '--braindead',
     ;; means trouble.
     (inferior-octave-send-list-and-digest (list "PS2\n"))
-    (if (string-match "\\(PS2\\|ans\\) = *$" (car inferior-octave-output-list))
- 	(inferior-octave-send-list-and-digest (list "PS2 (\"> \");\n")))
+    (when (string-match "\\(PS2\\|ans\\) = *$"
+                        (car inferior-octave-output-list))
+      (inferior-octave-send-list-and-digest (list "PS2 (\"> \");\n")))
 
-    ;; O.k., now we are ready for the Inferior Octave startup commands.
-    (let* (commands
-	   (program (file-name-nondirectory inferior-octave-program))
-	   (file (or inferior-octave-startup-file
-			  (concat "~/.emacs-" program))))
-      (setq commands
-	    (list "more off;\n"
-		  (if (not (string-equal
-			    inferior-octave-output-string ">> "))
-                      "PS1 (\"\\\\s> \");\n")
-		  (if (file-exists-p file)
-		      (format "source (\"%s\");\n" file))))
-      (inferior-octave-send-list-and-digest commands))
+    ;; O.K., now we are ready for the Inferior Octave startup commands.
+    (inferior-octave-send-list-and-digest
+     (list "more off;\n"
+           (unless (equal inferior-octave-output-string ">> ")
+             "PS1 (\"\\\\s> \");\n")
+           (when (and inferior-octave-startup-file
+                      (file-exists-p inferior-octave-startup-file))
+             (format "source (\"%s\");\n" inferior-octave-startup-file))))
+    ;; XXX: the first prompt is incorrectly highlighted
     (insert-before-markers
      (concat
       (if inferior-octave-output-list
-	  (concat (mapconcat
-		   'identity inferior-octave-output-list "\n")
-		  "\n"))
+          (concat (mapconcat
+                   'identity inferior-octave-output-list "\n")
+                  "\n"))
       inferior-octave-output-string))
 
     ;; And finally, everything is back to normal.
