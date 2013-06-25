@@ -74,7 +74,7 @@ struct xwidget_view{
 #define XWIDGETP(x) (CONSP (x) && EQ (XCAR (x), Qxwidget))
 /* Test for xwidget pseudovector*/
 #define XXWIDGETP(x) PSEUDOVECTORP (x, PVEC_XWIDGET)
-#define XXWIDGET(a) (eassert (XWIDGETP(a)),(struct xwidget *) XPNTR(a))
+#define XXWIDGET(a) (eassert (XXWIDGETP(a)),(struct xwidget *) XPNTR(a))
 
 
 struct xwidget_type
@@ -107,4 +107,6 @@ struct xwidget* lookup_xwidget (Lisp_Object  spec);
 #define XG_XWIDGET "emacs_xwidget"
 #define XG_XWIDGET_VIEW "emacs_xwidget_view"
 void      xwidget_view_delete_all_in_window(  struct window *w );
+
+void kill_buffer_xwidgets (Lisp_Object buffer);
 #endif  /* XWIDGET_H_INCLUDED */
