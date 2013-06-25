@@ -202,7 +202,7 @@ TYPE is a symbol which can take one of the following values:
   //should work a bit like "make-button"(make-button BEG END &rest PROPERTIES)
   // arg "type" and fwd should be keyword args eventually
   //(make-xwidget 3 3 'button "oei" 31 31 nil)
-  //(xwidget-info (car xwidget-alist))
+  //(xwidget-info (car xwidget-list))
   struct xwidget* xw = allocate_xwidget();
   Lisp_Object val;
   xw->type = type;
@@ -216,7 +216,7 @@ TYPE is a symbol which can take one of the following values:
   xw->height = XFASTINT(height);
   xw->width = XFASTINT(width);
   XSETPSEUDOVECTOR (val, xw, PVEC_XWIDGET); // set the vectorlike_header of VAL with the correct value
-  Vxwidget_alist = Fcons (val, Vxwidget_alist);
+  Vxwidget_list = Fcons (val, Vxwidget_list);
   xw->widgetwindow_osr = NULL;
   xw->widget_osr = NULL;
   xw->plist = Qnil;
@@ -300,6 +300,30 @@ TYPE is a symbol which can take one of the following values:
 #endif  /* HAVE_WEBKIT_OSR */
 
   return val;
+}
+
+DEFUN ("get-buffer-xwidgets", Fget_buffer_xwidgets, Sget_buffer_xwidgets, 1, 1, 0,
+       doc: /* Return the xwidgets associated with BUFFER.
+BUFFER may be a buffer or the name of one.
+       */
+       )
+     (Lisp_Object buffer)
+{
+    Lisp_Object xw, tail, xw_list;
+
+    if (NILP (buffer)) return Qnil;
+    buffer = Fget_buffer (buffer);
+    if (NILP (buffer)) return Qnil;
+
+    xw_list = Qnil;
+
+    for (tail = Vxwidget_list; CONSP (tail); tail = XCDR (tail))
+        {
+            xw = XCAR (tail);
+            if (XXWIDGETP (xw) && EQ (Fxwidget_buffer (xw), buffer))
+                xw_list = Fcons (xw, xw_list);
+        }
+    return xw_list;
 }
 
 int
@@ -1557,6 +1581,7 @@ syms_of_xwidget (void)
   defsubr (&Sxwidget_info);
   defsubr (&Sxwidget_view_info);
   defsubr (&Sxwidget_resize);
+  defsubr (&Sget_buffer_xwidgets);
 
 #ifdef HAVE_WEBKIT_OSR
   defsubr (&Sxwidget_webkit_goto_uri);
@@ -1594,8 +1619,8 @@ syms_of_xwidget (void)
 
   DEFSYM (QCplist, ":plist");
 
-  DEFVAR_LISP ("xwidget-alist", Vxwidget_alist, doc: /*xwidgets list*/);
-  Vxwidget_alist = Qnil;
+  DEFVAR_LISP ("xwidget-list", Vxwidget_list, doc: /*xwidgets list*/);
+  Vxwidget_list = Qnil;
 
   DEFVAR_LISP ("xwidget-view-alist", Vxwidget_view_alist, doc: /*xwidget views list*/);
   Vxwidget_view_alist = Qnil;
@@ -1820,5 +1845,18 @@ xwidget_end_redisplay (struct window *w, struct glyph_matrix *matrix)
     }
 }
 
-      
+/* Kill all xwidget in BUFFER. */
+void
+kill_buffer_xwidgets (Lisp_Object buffer)
+{
+    Lisp_Object tail, xw;
+
+    for (tail = Fget_buffer_xwidgets (buffer); CONSP (tail); tail = XCDR (tail))
+        {
+            xw = XCAR (tail);
+            Vxwidget_list = Fdelq (xw, Vxwidget_list);
+            /* TODO free the GTK things in xw */
+        }
+}
+
 #endif  /* HAVE_XWIDGETS */
