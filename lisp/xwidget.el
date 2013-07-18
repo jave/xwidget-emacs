@@ -58,7 +58,13 @@ see `make-xwidget' for types suitable for TYPE."
 ;;               ;;   (start-process "xembed2" "*xembed2*" "uzbl-core"  "-s" (number-to-string xembed-id)  "http://www.fsf.org" )  )
 ;;               )))))
 
-
+(defun xwidget-display (xwidget)
+  "Force xwidget to be displayed to create a xwidget_view."
+  (let* ((buffer (xwidget-buffer xwidget))
+         (window (display-buffer buffer))
+         (frame (window-frame window)))
+    (set-frame-visible frame t)
+    (redisplay t)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -438,16 +444,24 @@ It can be retrieved with `(xwidget-get XWIDGET PROPNAME)'."
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun xwidget-delete-zombies ()
+  (mapcar (lambda (xwidget-view)
+            (when (or (not (window-live-p (xwidget-view-window xwidget-view)))
+                      (not (find (xwidget-view-model xwidget-view)
+                                 xwidget-list)))
+              (delete-xwidget-view xwidget-view)))
+          xwidget-view-list))
+
 (defun xwidget-cleanup ()
   "Delete zombie xwidgets."
   ;;its still pretty easy to trigger bugs with xwidgets.
   ;;this function tries to implement a workaround
   (interactive)
-  (xwidget-delete-zombies) ;;kill xviews who should have been deleted but stull linger
-  (redraw-display);;redraw display otherwise ghost of zombies  will remain to haunt the screen
-  )
-
-
+  ;; kill xviews who should have been deleted but stull linger
+  (xwidget-delete-zombies)
+  ;; redraw display otherwise ghost of zombies  will remain to haunt the screen
+  (redraw-display))
 
 ;;this is a workaround because I cant find the right place to put it in C
 ;;seems to work well in practice though
@@ -458,6 +472,7 @@ It can be retrieved with `(xwidget-get XWIDGET PROPNAME)'."
   "Ask beforek illing a buffer that has xwidgets."
   (let ((xwidgets (get-buffer-xwidgets (current-buffer))))
     (or (not xwidgets)
+        (not (memq t (mapcar 'xwidget-query-on-exit-flag xwidgets)))
         (yes-or-no-p
          (format "Buffer %S has xwidgets; kill it? "
                  (buffer-name (current-buffer)))))))
