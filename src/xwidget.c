@@ -124,6 +124,7 @@ Lisp_Object Qxwidget_send_keyboard_event;
 Lisp_Object QCxwgir_class;
 Lisp_Object Qbutton, Qtoggle, Qslider, Qsocket, Qsocket_osr, Qcairo, Qxwgir,
   Qwebkit_osr, QCplist;
+Lisp_Object Qxwidgetp, Qxwidget_view_p;
 
 
 extern Lisp_Object  QCtype;
@@ -208,6 +209,7 @@ TYPE is a symbol which can take one of the following values:
   
   xw->height = XFASTINT(height);
   xw->width = XFASTINT(width);
+  xw->kill_without_query = 0;
   XSETXWIDGET (val, xw); // set the vectorlike_header of VAL with the correct value
   Vxwidget_list = Fcons (val, Vxwidget_list);
   xw->widgetwindow_osr = NULL;
@@ -313,7 +315,7 @@ BUFFER may be a buffer or the name of one.
     for (tail = Vxwidget_list; CONSP (tail); tail = XCDR (tail))
         {
             xw = XCAR (tail);
-            if (XXWIDGETP (xw) && EQ (Fxwidget_buffer (xw), buffer))
+            if (XWIDGETP (xw) && EQ (Fxwidget_buffer (xw), buffer))
                 xw_list = Fcons (xw, xw_list);
         }
     return xw_list;
@@ -434,7 +436,7 @@ xwidget_slider_changed (GtkRange *range,
 
   for (Lisp_Object tail = Vxwidget_view_list; CONSP (tail); tail = XCDR (tail))
     {
-      if (XXWIDGET_VIEW_P (XCAR (tail))) {
+      if (XWIDGET_VIEW_P (XCAR (tail))) {
         xv = XXWIDGET_VIEW (XCAR (tail));
         if (EQ (xvp->model, xv->model)) {
           //block sibling views signal handlers
@@ -462,7 +464,7 @@ xwidget_osr_damage_event_callback (GtkWidget *widget, GdkEventExpose *event, gpo
 
   for (Lisp_Object tail = Vxwidget_view_list; CONSP (tail); tail = XCDR (tail))
     {
-      if (XXWIDGET_VIEW_P (XCAR (tail))) {
+      if (XWIDGET_VIEW_P (XCAR (tail))) {
         xv = XXWIDGET_VIEW (XCAR (tail));
         if (XXWIDGET (xv->model) == xw)
           gtk_widget_queue_draw (xv->widget); //redraw all views, the master has changed
@@ -819,13 +821,13 @@ DEFUN ("xwgir-xwidget-call-method", Fxwgir_xwidget_call_method,  Sxwgir_xwidget_
        doc:	/* call xwidget object method.*/)
   (Lisp_Object xwidget, Lisp_Object method, Lisp_Object arguments)
 {
+  CHECK_XWIDGET (xwidget);
   GError *error = NULL;
   GIArgument return_value;
   GIArgument in_args[20];
 
 
   struct xwidget* xw; 
-  if(!XXWIDGETP(xwidget)) {printf("ERROR not an xwidget\n"); return Qnil;}; 
   if (NILP (xwidget)) { printf("ERROR xwidget nil\n"); return Qnil; };  
   xw = XXWIDGET(xwidget);                                               
   if(NULL == xw) printf("ERROR xw is 0\n");                               
@@ -1190,7 +1192,7 @@ x_draw_xwidget_glyph_string (struct glyph_string *s)
 //FUGLY macro that checks WEBKIT_IS_WEB_VIEW(xw->widget_osr) first 
 #define WEBKIT_FN_INIT()                        \
   struct xwidget* xw; \
-if(!XXWIDGETP(xwidget)) {printf("ERROR not an xwidget\n"); return Qnil;}; \
+  CHECK_XWIDGET (xwidget); \
  if(NILP (xwidget)) {printf("ERROR xwidget nil\n"); return Qnil;};    \
   xw = XXWIDGET(xwidget);                                                    \
   if(NULL == xw) printf("ERROR xw is 0\n");                               \
@@ -1327,6 +1329,7 @@ DEFUN ("xwidget-resize", Fxwidget_resize, Sxwidget_resize, 3, 3, 0, doc:
        /* resize xwidgets*/)
   (Lisp_Object xwidget, Lisp_Object new_width, Lisp_Object new_height)
 {
+  CHECK_XWIDGET (xwidget);
   struct xwidget* xw = XXWIDGET(xwidget);
   struct xwidget_view *xv;
   int  w, h;
@@ -1358,7 +1361,7 @@ DEFUN ("xwidget-resize", Fxwidget_resize, Sxwidget_resize, 3, 3, 0, doc:
 
   for (Lisp_Object tail = Vxwidget_view_list; CONSP (tail); tail = XCDR (tail)) //TODO MVC refactor lazy linear search
     {
-      if (XXWIDGET_VIEW_P (XCAR (tail))) {
+      if (XWIDGET_VIEW_P (XCAR (tail))) {
         xv = XXWIDGET_VIEW (XCAR (tail));
         if(XXWIDGET (xv->model) == xw) {
           gtk_layout_set_size (GTK_LAYOUT (xv->widgetwindow), xw->width, xw->height);
@@ -1374,6 +1377,7 @@ DEFUN ("xwidget-size-request", Fxwidget_size_request, Sxwidget_size_request, 1, 
        /* desired size (TODO crashes if arg not osr widget)*/)
   (Lisp_Object xwidget)
 {
+  CHECK_XWIDGET (xwidget);
   GtkRequisition requisition;
   Lisp_Object rv;
   gtk_widget_size_request(XXWIDGET(xwidget)->widget_osr, &requisition);
@@ -1391,9 +1395,17 @@ DEFUN ("xwidgetp", Fxwidgetp, Sxwidgetp, 1, 1, 0,
   return XWIDGETP (object) ? Qt : Qnil;
 }
 
-DEFUN("xwidget-info", Fxwidget_info , Sxwidget_info, 1,1,0, doc: /* get xwidget props */)
+DEFUN ("xwidget-view-p", Fxwidget_view_p, Sxwidget_view_p, 1, 1, 0,
+       doc: /* Return t if OBJECT is a xwidget-view.  */)
+  (Lisp_Object object)
+{
+  return XWIDGET_VIEW_P (object) ? Qt : Qnil;
+}
+
+DEFUN ("xwidget-info", Fxwidget_info , Sxwidget_info, 1,1,0, doc: /* get xwidget props */)
   (Lisp_Object xwidget)
 {
+  CHECK_XWIDGET (xwidget);
   Lisp_Object info, n;
   struct xwidget* xw = XXWIDGET(xwidget);
 
@@ -1403,29 +1415,45 @@ DEFUN("xwidget-info", Fxwidget_info , Sxwidget_info, 1,1,0, doc: /* get xwidget 
   XSETFASTINT(n, xw->width);
   ASET (info, 2, n);
   XSETFASTINT(n, xw->height);
-  ASET (info, 2, n);
+  ASET (info, 3, n);
 
   return info;
 }
 
-
-DEFUN("xwidget-view-info", Fxwidget_view_info , Sxwidget_view_info, 2,2,0, doc: /* get xwidget view props */)
-  (Lisp_Object xwidget, Lisp_Object window)
+DEFUN ("xwidget-view-info", Fxwidget_view_info , Sxwidget_view_info, 1, 1, 0, doc: /* get xwidget view props */)
+  (Lisp_Object xwidget_view)
 {
-  struct xwidget* xw = XXWIDGET(xwidget);
-  struct xwidget_view* xv = xwidget_view_lookup(xw, XWINDOW(window));
-
+  CHECK_XWIDGET_VIEW (xwidget_view);
+  struct xwidget_view *xv = XXWIDGET_VIEW (xwidget_view);
   Lisp_Object info;
 
   info = Fmake_vector (make_number (6), Qnil);
-  XVECTOR (info)->contents[0] = make_number(xv->x);
-  XVECTOR (info)->contents[1] = make_number(xv->y);
-  XVECTOR (info)->contents[2] = make_number(xv->clip_right);
-  XVECTOR (info)->contents[3] = make_number(xv->clip_bottom);
-  XVECTOR (info)->contents[4] = make_number(xv->clip_top);
-  XVECTOR (info)->contents[5] = make_number(xv->clip_left);
+  ASET (info, 0,  make_number(xv->x));
+  ASET (info, 1,  make_number(xv->y));
+  ASET (info, 2,  make_number(xv->clip_right));
+  ASET (info, 3,  make_number(xv->clip_bottom));
+  ASET (info, 4,  make_number(xv->clip_top));
+  ASET (info, 5,  make_number(xv->clip_left));
 
   return info;
+}
+
+DEFUN ("xwidget-view-model", Fxwidget_view_model, Sxwidget_view_model,
+       1, 1, 0,
+       doc: /* get xwidget view model */)
+  (Lisp_Object xwidget_view)
+{
+  CHECK_XWIDGET_VIEW (xwidget_view);
+  return XXWIDGET_VIEW (xwidget_view)->model;
+}
+
+DEFUN ("xwidget-view-window", Fxwidget_view_window, Sxwidget_view_window,
+       1, 1, 0,
+       doc: /* get xwidget view window */)
+  (Lisp_Object xwidget_view)
+{
+  CHECK_XWIDGET_VIEW (xwidget_view);
+  return XXWIDGET_VIEW (xwidget_view)->w;
 }
 
 DEFUN ("xwidget-send-keyboard-event", Fxwidget_send_keyboard_event, Sxwidget_send_keyboard_event, 2, 2, 0, doc:/* synthesize a kbd event for a xwidget. */
@@ -1492,39 +1520,46 @@ DEFUN ("xwidget-send-keyboard-event", Fxwidget_send_keyboard_event, Sxwidget_sen
   return Qnil;
 }
 
-
-
-DEFUN("xwidget-delete-zombies", Fxwidget_delete_zombies , Sxwidget_delete_zombies, 0,0,0, doc: /* */)
-  (void)
+DEFUN ("delete-xwidget-view", Fdelete_xwidget_view, Sdelete_xwidget_view,
+       1, 1, 0,
+       doc: /* Delete the XWIDGET-VIEW. */)
+  (Lisp_Object xwidget_view)
 {
-  /*
-    - remove all views with window gone
-
-    TODO
-    - remove all xwidgets with buffer gone
-    - remove all views with xw gone
-
-   */
-  struct xwidget_view* xv = NULL;
-  for (Lisp_Object tail = Vxwidget_view_list; CONSP (tail); tail = XCDR (tail))
-    {
-      if (XXWIDGET_VIEW_P (XCAR (tail))) {
-        xv = XXWIDGET_VIEW (XCAR (tail));
-        if(!WINDOW_LIVE_P (xv->w)) {
-          gtk_widget_destroy(GTK_WIDGET(xv->widgetwindow));
-          Vxwidget_view_list = Fdelq (XCAR (tail), Vxwidget_view_list);
-        }
-      }
-    }
+  CHECK_XWIDGET_VIEW (xwidget_view);
+  struct xwidget_view *xv = XXWIDGET_VIEW (xwidget_view);
+  gtk_widget_destroy(GTK_WIDGET (xv->widgetwindow));
+  Vxwidget_view_list = Fdelq (xwidget_view, Vxwidget_view_list);
 }
 
+DEFUN ("xwidget-view-lookup", Fxwidget_view_lookup, Sxwidget_view_lookup,
+       1, 2, 0,
+       doc: /* Return the xwidget-view associated to XWIDGET in
+WINDOW if specified, otherwise it uses the selected window. */)
+  (Lisp_Object xwidget, Lisp_Object window)
+{
+  CHECK_XWIDGET (xwidget);
+
+  if (NILP (window))
+    window = Fselected_window();
+  CHECK_WINDOW (window);
+
+  for (Lisp_Object tail = Vxwidget_view_list; CONSP (tail); tail = XCDR (tail))
+    {
+      Lisp_Object xwidget_view = XCAR (tail);
+      if (EQ (Fxwidget_view_model (xwidget_view), xwidget)
+          && EQ (Fxwidget_view_window (xwidget_view), window))
+        return xwidget_view;
+    }
+  
+  return Qnil;
+}
 
 DEFUN ("xwidget-plist", Fxwidget_plist, Sxwidget_plist,
        1, 1, 0,
        doc: /* Return the plist of XWIDGET.  */)
   (register Lisp_Object xwidget)
 {
-  //CHECK_XWIDGET (xwidget); //todo
+  CHECK_XWIDGET (xwidget);
   return XXWIDGET (xwidget)->plist;
 }
 
@@ -1533,7 +1568,7 @@ DEFUN ("xwidget-buffer", Fxwidget_buffer, Sxwidget_buffer,
        doc: /* Return the buffer of XWIDGET.  */)
   (register Lisp_Object xwidget)
 {
-  //CHECK_XWIDGET (xwidget); //todo
+  CHECK_XWIDGET (xwidget);
   return XXWIDGET (xwidget)->buffer;
 }
 
@@ -1542,14 +1577,36 @@ DEFUN ("set-xwidget-plist", Fset_xwidget_plist, Sset_xwidget_plist,
        doc: /* Replace the plist of XWIDGET with PLIST.  Returns PLIST.  */)
   (register Lisp_Object xwidget, Lisp_Object plist)
 {
-  //CHECK_XWIDGET (xwidget); //todo
+  CHECK_XWIDGET (xwidget);
   CHECK_LIST (plist);
 
   XXWIDGET (xwidget)->plist = plist;
   return plist;
 }
 
+DEFUN ("set-xwidget-query-on-exit-flag",
+       Fset_xwidget_query_on_exit_flag, Sset_xwidget_query_on_exit_flag,
+       2, 2, 0,
+       doc: /* Specify if query is needed for XWIDGET when Emacs is
+exited.  If the second argument FLAG is non-nil, Emacs will query the
+user before exiting or killing a buffer if XWIDGET is running.  This
+function returns FLAG. */)
+  (Lisp_Object xwidget, Lisp_Object flag)
+{
+  CHECK_XWIDGET (xwidget);
+  XXWIDGET (xwidget)->kill_without_query = NILP (flag);
+  return flag;
+}
 
+DEFUN ("xwidget-query-on-exit-flag",
+       Fxwidget_query_on_exit_flag, Sxwidget_query_on_exit_flag,
+       1, 1, 0,
+       doc: /* Return the current value of query-on-exit flag for XWIDGET. */)
+  (Lisp_Object xwidget)
+{
+  CHECK_XWIDGET (xwidget);
+  return (XXWIDGET (xwidget)->kill_without_query ? Qnil : Qt);
+}
 
 void
 syms_of_xwidget (void)
@@ -1558,10 +1615,18 @@ syms_of_xwidget (void)
 
   defsubr (&Smake_xwidget);
   defsubr (&Sxwidgetp);
+  DEFSYM (Qxwidgetp, "xwidgetp");
+  defsubr (&Sxwidget_view_p);
+  DEFSYM (Qxwidget_view_p, "xwidget-view-p");
   defsubr (&Sxwidget_info);
   defsubr (&Sxwidget_view_info);
   defsubr (&Sxwidget_resize);
   defsubr (&Sget_buffer_xwidgets);
+  defsubr (&Sxwidget_view_model);
+  defsubr (&Sxwidget_view_window);
+  defsubr (&Sxwidget_view_lookup);
+  defsubr (&Sxwidget_query_on_exit_flag);
+  defsubr (&Sset_xwidget_query_on_exit_flag);
 
 #ifdef HAVE_WEBKIT_OSR
   defsubr (&Sxwidget_webkit_goto_uri);
@@ -1573,7 +1638,7 @@ syms_of_xwidget (void)
   defsubr (&Sxwgir_xwidget_call_method  );
   defsubr (&Sxwgir_require_namespace);
   defsubr (&Sxwidget_size_request  );
-  defsubr (&Sxwidget_delete_zombies);
+  defsubr (&Sdelete_xwidget_view);
   defsubr (&Sxwidget_disable_plugin_for_mime);
 
   defsubr (&Sxwidget_send_keyboard_event);
@@ -1618,11 +1683,11 @@ syms_of_xwidget (void)
    xwidget type.  */
 
 int
-valid_xwidget_p (Lisp_Object object)
+valid_xwidget_spec_p (Lisp_Object object)
 {
   int valid_p = 0;
 
-  if (XWIDGETP (object))
+  if (CONSP (object) && EQ (XCAR (object), Qxwidget))
     {
       /* Lisp_Object tem; */
 
@@ -1656,7 +1721,7 @@ xwidget_spec_value ( Lisp_Object spec, Lisp_Object  key,
 {
   Lisp_Object tail;
 
-  eassert (valid_xwidget_p (spec));
+  eassert (valid_xwidget_spec_p (spec));
 
   for (tail = XCDR (spec);
        CONSP (tail) && CONSP (XCDR (tail)); tail = XCDR (XCDR (tail)))
@@ -1681,7 +1746,7 @@ xwidget_view_delete_all_in_window (struct window *w)
   struct xwidget_view* xv = NULL;
   for (Lisp_Object tail = Vxwidget_view_list; CONSP (tail); tail = XCDR (tail))
     {
-      if (XXWIDGET_VIEW_P (XCAR (tail))) {
+      if (XWIDGET_VIEW_P (XCAR (tail))) {
         xv = XXWIDGET_VIEW (XCAR (tail));
         if(XWINDOW (xv->w) == w) {
           gtk_widget_destroy(GTK_WIDGET(xv->widgetwindow));
@@ -1691,21 +1756,16 @@ xwidget_view_delete_all_in_window (struct window *w)
     }
 }
 
-
-
 struct xwidget_view*
 xwidget_view_lookup (struct xwidget* xw, struct window *w)
 {
-  struct xwidget_view* xv = NULL;
-  for (Lisp_Object tail = Vxwidget_view_list; CONSP (tail); tail = XCDR (tail))
-    {
-      if (XXWIDGET_VIEW_P (XCAR (tail))) {
-        xv = XXWIDGET_VIEW (XCAR (tail));
-        if (XXWIDGET (xv->model) == xw && XWINDOW (xv->w) == w)
-          return xv;
-      }
-    }
-  return NULL; /* we didnt find a matching view */
+  Lisp_Object xwidget, window, ret;
+  XSETXWIDGET (xwidget, xw);
+  XSETWINDOW (window, w);
+
+  ret = Fxwidget_view_lookup (xwidget, window);
+
+  return EQ (ret, Qnil) ? NULL : XXWIDGET_VIEW (ret);
 }
 
 struct xwidget*
@@ -1751,7 +1811,7 @@ xwidget_start_redisplay (void)
 {
   for (Lisp_Object tail = Vxwidget_view_list; CONSP (tail); tail = XCDR (tail))
     {
-      if (XXWIDGET_VIEW_P (XCAR (tail)))
+      if (XWIDGET_VIEW_P (XCAR (tail)))
         XXWIDGET_VIEW (XCAR (tail))->redisplayed = 0;
     }
 }
@@ -1817,7 +1877,7 @@ xwidget_end_redisplay (struct window *w, struct glyph_matrix *matrix)
 
   for (Lisp_Object tail = Vxwidget_view_list; CONSP (tail); tail = XCDR (tail))
     {
-      if (XXWIDGET_VIEW_P (XCAR (tail))) {
+      if (XWIDGET_VIEW_P (XCAR (tail))) {
         struct xwidget_view* xv = XXWIDGET_VIEW (XCAR (tail));
 
         //"touched" is only meaningful for the current window, so disregard other views
@@ -1835,12 +1895,21 @@ xwidget_end_redisplay (struct window *w, struct glyph_matrix *matrix)
 void
 kill_buffer_xwidgets (Lisp_Object buffer)
 {
-  Lisp_Object tail, xw;
+  Lisp_Object tail, xwidget;
   for (tail = Fget_buffer_xwidgets (buffer); CONSP (tail); tail = XCDR (tail))
     {
-      xw = XCAR (tail);
-      Vxwidget_list = Fdelq (xw, Vxwidget_list);
+      xwidget = XCAR (tail);
+      Vxwidget_list = Fdelq (xwidget, Vxwidget_list);
       /* TODO free the GTK things in xw */
+      {
+        CHECK_XWIDGET (xwidget);
+        struct xwidget *xw = XXWIDGET (xwidget);
+        if (xw->widget_osr && xw->widgetwindow_osr)
+          {
+            gtk_widget_destroy(GTK_WIDGET (xw->widget_osr));
+            gtk_widget_destroy(GTK_WIDGET (xw->widgetwindow_osr));
+          }
+      }
     }
 }
 
